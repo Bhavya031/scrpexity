@@ -1,4 +1,3 @@
-// In-memory storage for searches
 interface Search {
   id: string
   query: string
