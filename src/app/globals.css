@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+
+    /* Primary colors */
+    --primary: 330 85% 60%; /* Pink */
+    --primary-foreground: 0 0% 98%;
+
+    /* Brand colors - minimal pink to orange */
+    --brand-pink: 330 85% 60%;
+    --brand-orange: 25 95% 53%;
+
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 330 85% 60%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+.prose {
+  @apply text-foreground;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  @apply text-foreground;
+}
+
+.prose p,
+.prose ul,
+.prose ol {
+  @apply text-foreground/90;
+}
+
+.prose a {
+  @apply text-primary hover:text-primary/80;
+}
+
+/* Minimal gradient - pink to orange */
+.minimal-gradient {
+  background: linear-gradient(90deg, hsl(var(--brand-pink)), hsl(var(--brand-orange)));
+}
+
+/* Text gradient */
+.text-gradient {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(90deg, hsl(var(--brand-pink)), hsl(var(--brand-orange)));
+}
+
