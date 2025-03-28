@@ -28,10 +28,13 @@ interface SearchStep {
   summary?: string;
   error?: string;
   message?: string;
+  enhancedQueryLoaded?: boolean; // New prop to track if enhanced query is loaded
 }
 
 export function SearchResults({ searchId, query }: SearchResultsProps) {
-  const [steps, setSteps] = useState<SearchStep[]>([]);
+  const [steps, setSteps] = useState<SearchStep[]>([
+    { type: "enhancing", enhancedQueryLoaded: false }, // Initialize with loading step 1
+  ]);
   const [isLoading, setIsLoading] = useState(true);
   const [result, setResult] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
@@ -83,11 +86,20 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
                   switch (data.step) {
                     case 1:
                       setEnhancedQuery(data.enhancedQuery);
-                      setSteps([{ type: "enhancing", enhancedQuery: data.enhancedQuery }]);
+                      setSteps([
+                        {
+                          type: "enhancing",
+                          enhancedQuery: data.enhancedQuery,
+                          enhancedQueryLoaded: true, // Mark enhanced query as loaded
+                        },
+                      ]);
                       setCurrentStep(0);
                       break;
                     case 2:
-                      setSteps((prev) => [...prev, { type: "searching", message: data.message }]);
+                      setSteps((prev) => [
+                        ...prev,
+                        { type: "searching", message: data.message },
+                      ]);
                       setCurrentStep(1);
                       setStep2Started(true);
                       break;
@@ -105,11 +117,17 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
                       break;
                     case 4:
                       setResult(data.summary);
-                      setSteps((prev) => [...prev, { type: "wrapping", summary: data.summary }]);
+                      setSteps((prev) => [
+                        ...prev,
+                        { type: "wrapping", summary: data.summary },
+                      ]);
                       setCurrentStep(3);
                       break;
                     case 5:
-                      setSteps((prev) => [...prev, { type: "cleanup", message: data.message }]);
+                      setSteps((prev) => [
+                        ...prev,
+                        { type: "cleanup", message: data.message },
+                      ]);
                       setIsLoading(false);
                       break;
                     default:
@@ -149,24 +167,23 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
     }
   };
 
-  const getStepColor = (type: string, index:number) => {
-      if (index === currentStep) {
-          switch (type) {
-              case "enhancing":
-                  return "border-brand-pink/20 bg-brand-pink/5";
-              case "searching":
-                  return "border-brand-pink/20 bg-brand-pink/5";
-              case "reading":
-                  return "border-brand-orange/20 bg-brand-orange/5";
-              case "wrapping":
-                  return "border-brand-pink/20 bg-brand-pink/5";
-              default:
-                  return "bg-background";
-          }
-      } else {
-        return "bg-background";
+  const getStepColor = (type: string, index: number) => {
+    if (index === currentStep) {
+      switch (type) {
+        case "enhancing":
+          return "border-brand-pink/20 bg-brand-pink/5";
+        case "searching":
+          return "border-brand-pink/20 bg-brand-pink/5";
+        case "reading":
+          return "border-brand-orange/20 bg-brand-orange/5";
+        case "wrapping":
+          return "border-brand-pink/20 bg-brand-pink/5";
+        default:
+          return "bg-background";
       }
-
+    } else {
+      return "bg-background";
+    }
   };
 
   return (
@@ -207,14 +224,16 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
                   {step.type === "wrapping" && "Creating a comprehensive answer"}
                 </p>
 
-                {step.type === "enhancing" && step.enhancedQuery && (
-                  <div className="mt-4 p-3 rounded-md bg-background border border-brand-pink/20">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">
-                      Enhanced search term:
-                    </p>
-                    <p className="text-sm font-medium">{step.enhancedQuery}</p>
-                  </div>
-                )}
+                {step.type === "enhancing" &&
+                  step.enhancedQueryLoaded &&
+                  step.enhancedQuery && (
+                    <div className="mt-4 p-3 rounded-md bg-background border border-brand-pink/20">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">
+                        Enhanced search term:
+                      </p>
+                      <p className="text-sm font-medium">{step.enhancedQuery}</p>
+                    </div>
+                  )}
                 {step.type === "searching" && step2Started && (
                   <p>Step 2 started</p>
                 )}
