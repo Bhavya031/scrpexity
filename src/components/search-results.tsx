@@ -1,160 +1,187 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { Loader2, ExternalLink, Search, BookOpen, Sparkles, Wand2 } from "lucide-react"
+import { useEffect, useState, useRef } from "react";
+import {
+  Loader2,
+  ExternalLink,
+  Search,
+  BookOpen,
+  Sparkles,
+  Wand2,
+} from "lucide-react";
 
 interface SearchResultsProps {
-  searchId: string
-  query: string
+  searchId: string;
+  query: string;
 }
 
 interface SearchStep {
-  type: "enhancing" | "searching" | "reading" | "wrapping"
-  content?: string
+  type: "enhancing" | "searching" | "reading" | "wrapping" | "cleanup";
+  content?: string;
   sources?: Array<{
-    name: string
-    url: string
-  }>
-  enhancedQuery?: string
+    name: string;
+    url: string;
+  }>;
+  enhancedQuery?: string;
+  link?: string;
+  contentBlocks?: number;
+  summary?: string;
+  error?: string;
+  message?: string;
 }
 
 export function SearchResults({ searchId, query }: SearchResultsProps) {
-  const [steps, setSteps] = useState<SearchStep[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [result, setResult] = useState<string | null>(null)
-  const [currentStep, setCurrentStep] = useState(0)
-  const [enhancedQuery, setEnhancedQuery] = useState<string | null>(null)
+  const [steps, setSteps] = useState<SearchStep[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [result, setResult] = useState<string | null>(null);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [enhancedQuery, setEnhancedQuery] = useState<string | null>(null);
+  const [step2Started, setStep2Started] = useState(false);
+
+  const isMounted = useRef(false);
 
   useEffect(() => {
-    // Simulate the search process
-    const simulateSearch = async () => {
-      // Step 1: Enhancing search term
-      setSteps([{ type: "enhancing" }])
-      setCurrentStep(0)
-
-      try {
-        // Call the enhance-search API
-        const enhanceResponse = await fetch("/api/enhance-search", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ query }),
-        })
-
-        if (enhanceResponse.ok) {
-          const enhanceData = await enhanceResponse.json()
-          setEnhancedQuery(enhanceData.enhancedQuery)
-
-          // Update the enhancing step with the enhanced query
-          setSteps((prev) => [
-            {
-              ...prev[0],
-              enhancedQuery: enhanceData.enhancedQuery,
+    if (!isMounted.current) {
+      isMounted.current = true;
+      const fetchSearchData = async () => {
+        try {
+          const response = await fetch("/api/enhance-search", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
             },
-          ])
+            body: JSON.stringify({ query }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          if (!reader) {
+            console.error("Response body reader is null.");
+            return;
+          }
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split("\n");
+            buffer = parts.pop() || "";
+
+            for (const part of parts) {
+              if (part) {
+                try {
+                  const data = JSON.parse(part);
+                  console.log("Received data:", data);
+
+                  switch (data.step) {
+                    case 1:
+                      setEnhancedQuery(data.enhancedQuery);
+                      setSteps([{ type: "enhancing", enhancedQuery: data.enhancedQuery }]);
+                      setCurrentStep(0);
+                      break;
+                    case 2:
+                      setSteps((prev) => [...prev, { type: "searching", message: data.message }]);
+                      setCurrentStep(1);
+                      setStep2Started(true);
+                      break;
+                    case 3:
+                      setSteps((prev) => [
+                        ...prev,
+                        {
+                          type: "reading",
+                          link: data.link,
+                          contentBlocks: data.contentBlocks,
+                          error: data.error,
+                        },
+                      ]);
+                      setCurrentStep(2);
+                      break;
+                    case 4:
+                      setResult(data.summary);
+                      setSteps((prev) => [...prev, { type: "wrapping", summary: data.summary }]);
+                      setCurrentStep(3);
+                      break;
+                    case 5:
+                      setSteps((prev) => [...prev, { type: "cleanup", message: data.message }]);
+                      setIsLoading(false);
+                      break;
+                    default:
+                      console.warn("Unknown step:", data.step);
+                  }
+                } catch (e) {
+                  console.error("Error parsing JSON:", e, part);
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching search data:", error);
+          setIsLoading(false);
         }
-      } catch (error) {
-        console.error("Error enhancing search:", error)
+      };
+      fetchSearchData();
+    }
+  }, [searchId, query]);
+
+  const getStepIcon = (type: string, isActive: boolean, index: number) => {
+    if (isActive && isLoading && index === currentStep) {
+      return <Loader2 className="h-5 w-5 animate-spin text-brand-pink" />;
+    }
+
+    switch (type) {
+      case "enhancing":
+        return <Wand2 className="h-5 w-5 text-brand-pink" />;
+      case "searching":
+        return <Search className="h-5 w-5 text-brand-pink" />;
+      case "reading":
+        return <BookOpen className="h-5 w-5 text-brand-orange" />;
+      case "wrapping":
+        return <Sparkles className="h-5 w-5 text-brand-pink" />;
+      default:
+        return null;
+    }
+  };
+
+  const getStepColor = (type: string, index:number) => {
+      if (index === currentStep) {
+          switch (type) {
+              case "enhancing":
+                  return "border-brand-pink/20 bg-brand-pink/5";
+              case "searching":
+                  return "border-brand-pink/20 bg-brand-pink/5";
+              case "reading":
+                  return "border-brand-orange/20 bg-brand-orange/5";
+              case "wrapping":
+                  return "border-brand-pink/20 bg-brand-pink/5";
+              default:
+                  return "bg-background";
+          }
+      } else {
+        return "bg-background";
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      // Step 2: Searching
-      setSteps((prev) => [...prev, { type: "searching" }])
-      setCurrentStep(1)
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-
-      // Step 3: Reading sources
-      setSteps((prev) => [
-        ...prev,
-        {
-          type: "reading",
-          sources: [
-            { name: "example.com", url: "https://example.com" },
-            { name: "docs.example.org", url: "https://docs.example.org" },
-            { name: "wikipedia.org", url: "https://wikipedia.org" },
-          ],
-        },
-      ])
-      setCurrentStep(2)
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-
-      // Step 4: Wrapping up
-      setSteps((prev) => [...prev, { type: "wrapping" }])
-      setCurrentStep(3)
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      // Final result
-      setResult(`Transformers are a groundbreaking deep learning architecture introduced in 2017 through the paper "Attention Is All You Need" by researchers at Google Brain. They have become a cornerstone in machine learning, particularly for tasks involving sequential data, such as natural language processing (NLP), computer vision, and multimodal applications.
-
-Key features of Transformers include:
-
-1. Self-Attention Mechanism: Transformers rely on self-attention to process input data. This mechanism allows the model to focus on the most relevant parts of the input sequence, capturing relationships between elements regardless of their position in the sequence.
-
-2. Parallel Processing: Unlike RNNs, transformers process entire sequences simultaneously, significantly reducing training time and enabling efficient handling of longer sequences.
-
-3. Encoder-Decoder Architecture: The original transformer design consists of an encoder to process input data and a decoder to generate output.
-
-Transformers have revolutionized AI by enabling more efficient training on larger datasets and achieving state-of-the-art results across multiple domains.`)
-      setIsLoading(false)
-    }
-
-    simulateSearch()
-
-    return () => {
-      // Cleanup logic here
-    }
-  }, [searchId, query])
-
-  const getStepIcon = (type: string, isActive: boolean) => {
-    if (isActive && isLoading) {
-      return <Loader2 className="h-5 w-5 animate-spin text-brand-pink" />
-    }
-
-    switch (type) {
-      case "enhancing":
-        return <Wand2 className="h-5 w-5 text-brand-pink" />
-      case "searching":
-        return <Search className="h-5 w-5 text-brand-pink" />
-      case "reading":
-        return <BookOpen className="h-5 w-5 text-brand-orange" />
-      case "wrapping":
-        return <Sparkles className="h-5 w-5 text-brand-pink" />
-      default:
-        return null
-    }
-  }
-
-  const getStepColor = (type: string) => {
-    switch (type) {
-      case "enhancing":
-        return "border-brand-pink/20 bg-brand-pink/5"
-      case "searching":
-        return "border-brand-pink/20 bg-brand-pink/5"
-      case "reading":
-        return "border-brand-orange/20 bg-brand-orange/5"
-      case "wrapping":
-        return "border-brand-pink/20 bg-brand-pink/5"
-      default:
-        return "bg-background"
-    }
-  }
+  };
 
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">{query}</h1>
 
-      {/* Search steps */}
       <div className="space-y-6 mb-8">
         {steps.map((step, index) => (
           <div
             key={index}
-            className={`rounded-lg border p-4 ${index === currentStep ? getStepColor(step.type) + " shadow-md" : "bg-background"}`}
+            className={`rounded-lg border p-4 ${getStepColor(step.type, index)}`}
           >
             <div className="flex items-start gap-4">
               <div className="mt-1 h-10 w-10 flex-shrink-0 rounded-full bg-background flex items-center justify-center">
-                {getStepIcon(step.type, index === currentStep)}
+                {getStepIcon(step.type, index === currentStep, index)}
               </div>
               <div className="flex-1">
                 <div className="flex items-center justify-between">
@@ -169,32 +196,44 @@ Transformers have revolutionized AI by enabling more efficient training on large
                   </span>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {step.type === "enhancing" && "Optimizing your query for better results"}
-                  {step.type === "searching" && `Finding relevant information about "${enhancedQuery || query}"`}
-                  {step.type === "reading" && "Analyzing content from multiple sources"}
+                  {step.type === "enhancing" &&
+                    "Optimizing your query for better results"}
+                  {step.type === "searching" &&
+                    `Finding relevant information about "${
+                      enhancedQuery || query
+                    }"`}
+                  {step.type === "reading" &&
+                    "Analyzing content from multiple sources"}
                   {step.type === "wrapping" && "Creating a comprehensive answer"}
                 </p>
 
                 {step.type === "enhancing" && step.enhancedQuery && (
                   <div className="mt-4 p-3 rounded-md bg-background border border-brand-pink/20">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Enhanced search term:</p>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                      Enhanced search term:
+                    </p>
                     <p className="text-sm font-medium">{step.enhancedQuery}</p>
                   </div>
                 )}
-
-                {step.type === "reading" && step.sources && (
+                {step.type === "searching" && step2Started && (
+                  <p>Step 2 started</p>
+                )}
+                {step.type === "reading" && step.link && (
                   <div className="mt-4 space-y-2">
-                    <h4 className="text-xs font-medium text-muted-foreground">Sources being analyzed:</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {step.sources.map((source, i) => (
-                        <div key={i} className="flex items-center gap-2 text-sm p-2 rounded-md bg-background">
-                          <div className="h-6 w-6 rounded-full bg-brand-orange/10 flex items-center justify-center">
-                            <ExternalLink className="h-3 w-3 text-brand-orange" />
-                          </div>
-                          <span className="flex-1 truncate">{source.name}</span>
-                        </div>
-                      ))}
-                    </div>
+                    <h4 className="text-xs font-medium text-muted-foreground">
+                      Link:
+                    </h4>
+                    <p>{step.link}</p>
+                    {step.contentBlocks && (
+                      <p>Content blocks: {step.contentBlocks}</p>
+                    )}
+                    {step.error && <p>Error: {step.error}</p>}
+                  </div>
+                )}
+
+                {step.type === "wrapping" && step.summary && (
+                  <div className="mt-4">
+                    <p>Summary: {step.summary}</p>
                   </div>
                 )}
               </div>
@@ -203,7 +242,6 @@ Transformers have revolutionized AI by enabling more efficient training on large
         ))}
       </div>
 
-      {/* Search result */}
       {!isLoading && result && (
         <div className="rounded-lg border bg-card p-6 shadow-md">
           <div className="prose prose-sm dark:prose-invert max-w-none">
@@ -234,7 +272,7 @@ Transformers have revolutionized AI by enabling more efficient training on large
         </div>
       )}
     </div>
-  )
+  );
 }
 
 function SourceCard({
@@ -242,20 +280,20 @@ function SourceCard({
   url,
   color = "pink",
 }: {
-  name: string
-  url: string
-  color?: "pink" | "orange"
+  name: string;
+  url: string;
+  color?: "pink" | "orange";
 }) {
   const getColorClass = () => {
     switch (color) {
       case "pink":
-        return "bg-brand-pink/10 text-brand-pink"
+        return "bg-brand-pink/10 text-brand-pink";
       case "orange":
-        return "bg-brand-orange/10 text-brand-orange"
+        return "bg-brand-orange/10 text-brand-orange";
       default:
-        return "bg-primary/10 text-primary"
+        return "bg-primary/10 text-primary";
     }
-  }
+  };
 
   return (
     <a
@@ -272,6 +310,5 @@ function SourceCard({
         <p className="text-xs text-muted-foreground truncate">{url}</p>
       </div>
     </a>
-  )
+  );
 }
-

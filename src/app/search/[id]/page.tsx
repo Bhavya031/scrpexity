@@ -11,7 +11,7 @@ interface SearchPageProps {
 }
 
 export default async function SearchPage({ params }: SearchPageProps) {
-  const { id } = params
+  const { id } = await params
 
   // Get the search from the database
   const search = await getSearchById(id)
