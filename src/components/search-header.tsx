@@ -56,7 +56,7 @@ export function SearchHeader({ query }: SearchHeaderProps) {
       <div className="container max-w-6xl mx-auto px-4 py-3">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex-shrink-0">
-            <Logo className="w-8 h-8" />
+            {/* <Logo className="w-8 h-8" /> */}
           </Link>
 
           <form onSubmit={handleSubmit} className="flex-1 relative">

@@ -16,7 +16,7 @@ interface SearchResultsProps {
 }
 
 interface SearchStep {
-  type: "enhancing" | "searching" | "reading" | "wrapping" | "cleanup";
+  type: "enhancing" | "searching" | "reading" | "wrapping";
   content?: string;
   sources?: Array<{
     name: string;
@@ -28,12 +28,16 @@ interface SearchStep {
   summary?: string;
   error?: string;
   message?: string;
-  enhancedQueryLoaded?: boolean; // New prop to track if enhanced query is loaded
+  enhancedQueryLoaded?: boolean;
+  readingLinks?: Array<{
+    name: string;
+    url: string;
+  }>; // Array of links for reading step
 }
 
 export function SearchResults({ searchId, query }: SearchResultsProps) {
   const [steps, setSteps] = useState<SearchStep[]>([
-    { type: "enhancing", enhancedQueryLoaded: false }, // Initialize with loading step 1
+    { type: "enhancing", enhancedQueryLoaded: false },
   ]);
   const [isLoading, setIsLoading] = useState(true);
   const [result, setResult] = useState<string | null>(null);
@@ -71,7 +75,11 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
 
           while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+              // Stream is done - set loading to false here since there's no step 5
+              setIsLoading(false);
+              break;
+            }
 
             buffer += decoder.decode(value, { stream: true });
             const parts = buffer.split("\n");
@@ -90,7 +98,7 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
                         {
                           type: "enhancing",
                           enhancedQuery: data.enhancedQuery,
-                          enhancedQueryLoaded: true, // Mark enhanced query as loaded
+                          enhancedQueryLoaded: true,
                         },
                       ]);
                       setCurrentStep(0);
@@ -104,15 +112,41 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
                       setStep2Started(true);
                       break;
                     case 3:
-                      setSteps((prev) => [
-                        ...prev,
-                        {
-                          type: "reading",
-                          link: data.link,
-                          contentBlocks: data.contentBlocks,
-                          error: data.error,
-                        },
-                      ]);
+                      setSteps((prev) => {
+                        const newReadingLinks = data.link
+                          ? [
+                              ...(prev.find((step) => step.type === "reading")
+                                ?.readingLinks || []),
+                              { name: `Source ${(prev.find((step) => step.type === "reading")?.readingLinks || []).length + 1}`, url: data.link },
+                            ]
+                          : prev.find((step) => step.type === "reading")
+                              ?.readingLinks || [];
+                        const readingStepIndex = prev.findIndex(
+                          (step) => step.type === "reading"
+                        );
+                        if (readingStepIndex !== -1) {
+                          return prev.map((step, index) =>
+                            index === readingStepIndex
+                              ? {
+                                  ...step,
+                                  readingLinks: newReadingLinks,
+                                  contentBlocks: data.contentBlocks,
+                                  error: data.error,
+                                }
+                              : step
+                          );
+                        } else {
+                          return [
+                            ...prev,
+                            {
+                              type: "reading",
+                              readingLinks: newReadingLinks,
+                              contentBlocks: data.contentBlocks,
+                              error: data.error,
+                            },
+                          ];
+                        }
+                      });
                       setCurrentStep(2);
                       break;
                     case 4:
@@ -122,12 +156,7 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
                         { type: "wrapping", summary: data.summary },
                       ]);
                       setCurrentStep(3);
-                      break;
-                    case 5:
-                      setSteps((prev) => [
-                        ...prev,
-                        { type: "cleanup", message: data.message },
-                      ]);
+                      // Set loading to false when step 4 completes since there's no step 5
                       setIsLoading(false);
                       break;
                     default:
@@ -234,27 +263,26 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
                       <p className="text-sm font-medium">{step.enhancedQuery}</p>
                     </div>
                   )}
-                {step.type === "searching" && step2Started && (
-                  <p>Step 2 started</p>
-                )}
-                {step.type === "reading" && step.link && (
+
+                {step.type === "reading" && step.readingLinks && (
                   <div className="mt-4 space-y-2">
                     <h4 className="text-xs font-medium text-muted-foreground">
-                      Link:
+                      Links:
                     </h4>
-                    <p>{step.link}</p>
-                    {step.contentBlocks && (
-                      <p>Content blocks: {step.contentBlocks}</p>
-                    )}
-                    {step.error && <p>Error: {step.error}</p>}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {step.readingLinks.map((link, linkIndex) => (
+                        <SourceCard
+                          key={linkIndex}
+                          name={`Source ${linkIndex + 1}`}
+                          url={link.url}
+                          color="orange"
+                        />
+                      ))}
+                    </div>
                   </div>
                 )}
 
-                {step.type === "wrapping" && step.summary && (
-                  <div className="mt-4">
-                    <p>Summary: {step.summary}</p>
-                  </div>
-                )}
+                {/* We remove the entire summary display from the wrapping step */}
               </div>
             </div>
           </div>
