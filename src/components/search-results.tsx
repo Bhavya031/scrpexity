@@ -32,7 +32,8 @@ interface SearchStep {
   readingLinks?: Array<{
     name: string;
     url: string;
-  }>; // Array of links for reading step
+  }>;
+  wrappingLoading?: boolean;
 }
 
 export function SearchResults({ searchId, query }: SearchResultsProps) {
@@ -44,6 +45,8 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [enhancedQuery, setEnhancedQuery] = useState<string | null>(null);
   const [step2Started, setStep2Started] = useState(false);
+  const [showAnswer, setShowAnswer] = useState(false);
+  const [answerLoading, setAnswerLoading] = useState(false);
 
   const isMounted = useRef(false);
 
@@ -76,7 +79,6 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
           while (true) {
             const { done, value } = await reader.read();
             if (done) {
-              // Stream is done - set loading to false here since there's no step 5
               setIsLoading(false);
               break;
             }
@@ -117,7 +119,13 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
                           ? [
                               ...(prev.find((step) => step.type === "reading")
                                 ?.readingLinks || []),
-                              { name: `Source ${(prev.find((step) => step.type === "reading")?.readingLinks || []).length + 1}`, url: data.link },
+                              {
+                                name: `Source ${(
+                                  prev.find((step) => step.type === "reading")
+                                    ?.readingLinks || []
+                                ).length + 1}`,
+                                url: data.link,
+                              },
                             ]
                           : prev.find((step) => step.type === "reading")
                               ?.readingLinks || [];
@@ -148,16 +156,41 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
                         }
                       });
                       setCurrentStep(2);
+                      
+                      // Check if we need to add a wrapping step preemptively
+                      if (data.contentBlocks && !steps.some(step => step.type === "wrapping")) {
+                        setSteps(prev => [...prev, { 
+                          type: "wrapping", 
+                          wrappingLoading: true
+                        }]);
+                        // Show answer section with loading state after we have content blocks
+                        if (data.contentBlocks > 0) {
+                          setShowAnswer(true);
+                          setAnswerLoading(true);
+                        }
+                      }
                       break;
                     case 4:
                       setResult(data.summary);
-                      setSteps((prev) => [
-                        ...prev,
-                        { type: "wrapping", summary: data.summary },
-                      ]);
+                      setSteps((prev) => {
+                        const wrappingStepIndex = prev.findIndex(step => step.type === "wrapping");
+                        if (wrappingStepIndex !== -1) {
+                          return prev.map((step, index) =>
+                            index === wrappingStepIndex
+                              ? { ...step, wrappingLoading: data.loading, summary: data.summary }
+                              : step
+                          );
+                        } else {
+                          return [...prev, { 
+                            type: "wrapping", 
+                            summary: data.summary, 
+                            wrappingLoading: data.loading 
+                          }];
+                        }
+                      });
                       setCurrentStep(3);
-                      // Set loading to false when step 4 completes since there's no step 5
-                      setIsLoading(false);
+                      setShowAnswer(true);
+                      setAnswerLoading(data.loading);
                       break;
                     default:
                       console.warn("Unknown step:", data.step);
@@ -176,6 +209,28 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
       fetchSearchData();
     }
   }, [searchId, query]);
+
+  // Add wrapping step if there's a significant delay after reading step completes
+  useEffect(() => {
+    // If we're at reading step and have content blocks but no wrapping step yet
+    const readingStep = steps.find(step => step.type === "reading");
+    const hasWrappingStep = steps.some(step => step.type === "wrapping");
+    
+    if (currentStep === 2 && readingStep?.contentBlocks && !hasWrappingStep) {
+      // Add wrapping step and show answer section with loading state
+      const timeoutId = setTimeout(() => {
+        setSteps(prev => [...prev, { 
+          type: "wrapping", 
+          wrappingLoading: true 
+        }]);
+        setCurrentStep(3);
+        setShowAnswer(true);
+        setAnswerLoading(true);
+      }, 500); // Add a small delay to ensure we don't add it unnecessarily
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [steps, currentStep]);
 
   const getStepIcon = (type: string, isActive: boolean, index: number) => {
     if (isActive && isLoading && index === currentStep) {
@@ -223,7 +278,10 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
         {steps.map((step, index) => (
           <div
             key={index}
-            className={`rounded-lg border p-4 ${getStepColor(step.type, index)}`}
+            className={`rounded-lg border p-4 ${getStepColor(
+              step.type,
+              index
+            )}`}
           >
             <div className="flex items-start gap-4">
               <div className="mt-1 h-10 w-10 flex-shrink-0 rounded-full bg-background flex items-center justify-center">
@@ -281,40 +339,64 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
                     </div>
                   </div>
                 )}
-
-                {/* We remove the entire summary display from the wrapping step */}
+                
+                {step.type === "wrapping" && step.wrappingLoading && (
+                  <div className="flex justify-center mt-4">
+                  </div>
+                )}
               </div>
             </div>
           </div>
         ))}
       </div>
 
-      {!isLoading && result && (
+      {showAnswer && (
         <div className="rounded-lg border bg-card p-6 shadow-md">
           <div className="prose prose-sm dark:prose-invert max-w-none">
             <h2 className="text-xl font-semibold mb-4">Answer</h2>
-            <div className="whitespace-pre-line">{result}</div>
-
-            <div className="mt-8 pt-4 border-t">
-              <h3 className="text-sm font-medium mb-2">Sources</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <SourceCard
-                  name="Wikipedia"
-                  url="https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)"
-                  color="pink"
-                />
-                <SourceCard
-                  name="Drishti IAS"
-                  url="https://www.drishtiias.com/transformers-in-machine-learning"
-                  color="orange"
-                />
-                <SourceCard
-                  name="Polo Club"
-                  url="https://poloclub.github.io/llm-transformer-visualization/"
-                  color="pink"
-                />
+            {answerLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-brand-pink"/>
               </div>
-            </div>
+            ) : (
+              <div className="whitespace-pre-line">{result}</div>
+            )}
+
+            {!answerLoading && result && (
+              <div className="mt-8 pt-4 border-t">
+                <h3 className="text-sm font-medium mb-2">Sources</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {steps
+                    .find(step => step.type === "reading")
+                    ?.readingLinks?.map((link, index) => (
+                      <SourceCard
+                        key={index}
+                        name={`Source ${index + 1}`}
+                        url={link.url}
+                        color={index % 2 === 0 ? "pink" : "orange"}
+                      />
+                    )) || (
+                    <>
+                      <SourceCard
+                        name="Wikipedia"
+                        url="https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)"
+                        color="pink"
+                      />
+                      <SourceCard
+                        name="Drishti IAS"
+                        url="https://www.drishtiias.com/transformers-in-machine-learning"
+                        color="orange"
+                      />
+                      <SourceCard
+                        name="Polo Club"
+                        url="https://poloclub.github.io/llm-transformer-visualization/"
+                        color="pink"
+                      />
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
