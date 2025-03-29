@@ -44,10 +44,11 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
   const [result, setResult] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [enhancedQuery, setEnhancedQuery] = useState<string | null>(null);
-  const [step2Started, setStep2Started] = useState(false);
   const [showAnswer, setShowAnswer] = useState(false);
   const [answerLoading, setAnswerLoading] = useState(false);
-
+  
+  // Track if we've received the step 4 event
+  const receivedStep4 = useRef(false);
   const isMounted = useRef(false);
 
   useEffect(() => {
@@ -111,7 +112,6 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
                         { type: "searching", message: data.message },
                       ]);
                       setCurrentStep(1);
-                      setStep2Started(true);
                       break;
                     case 3:
                       setSteps((prev) => {
@@ -156,40 +156,61 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
                         }
                       });
                       setCurrentStep(2);
-                      
-                      // Check if we need to add a wrapping step preemptively
-                      if (data.contentBlocks && !steps.some(step => step.type === "wrapping")) {
-                        setSteps(prev => [...prev, { 
-                          type: "wrapping", 
-                          wrappingLoading: true
-                        }]);
-                        // Show answer section with loading state after we have content blocks
-                        if (data.contentBlocks > 0) {
-                          setShowAnswer(true);
-                          setAnswerLoading(true);
-                        }
-                      }
                       break;
                     case 4:
+                      // Only add the wrapping step if we haven't done so already
+                      if (!receivedStep4.current) {
+                        receivedStep4.current = true;
+                        setCurrentStep(3);
+                        
+                        setSteps((prev) => {
+                          // Check if wrapping step already exists
+                          const wrappingIndex = prev.findIndex(step => step.type === "wrapping");
+                          
+                          if (wrappingIndex === -1) {
+                            // Add the wrapping step if it doesn't exist
+                            return [...prev, {
+                              type: "wrapping",
+                              wrappingLoading: data.loading,
+                              summary: data.loading ? undefined : data.summary
+                            }];
+                          } else {
+                            // Update the existing wrapping step
+                            return prev.map((step, index) => 
+                              index === wrappingIndex 
+                                ? { 
+                                    ...step, 
+                                    wrappingLoading: data.loading,
+                                    summary: data.loading ? undefined : data.summary 
+                                  }
+                                : step
+                            );
+                          }
+                        });
+                        
+                        // Only show answer section when we receive step 4
+                        setShowAnswer(true);
+                      } else {
+                        // Just update the wrapping loading state and summary
+                        setSteps((prev) => {
+                          const wrappingIndex = prev.findIndex(step => step.type === "wrapping");
+                          
+                          if (wrappingIndex !== -1) {
+                            return prev.map((step, index) => 
+                              index === wrappingIndex 
+                                ? { 
+                                    ...step, 
+                                    wrappingLoading: data.loading,
+                                    summary: data.loading ? step.summary : data.summary 
+                                  }
+                                : step
+                            );
+                          }
+                          return prev;
+                        });
+                      }
+                      
                       setResult(data.summary);
-                      setSteps((prev) => {
-                        const wrappingStepIndex = prev.findIndex(step => step.type === "wrapping");
-                        if (wrappingStepIndex !== -1) {
-                          return prev.map((step, index) =>
-                            index === wrappingStepIndex
-                              ? { ...step, wrappingLoading: data.loading, summary: data.summary }
-                              : step
-                          );
-                        } else {
-                          return [...prev, { 
-                            type: "wrapping", 
-                            summary: data.summary, 
-                            wrappingLoading: data.loading 
-                          }];
-                        }
-                      });
-                      setCurrentStep(3);
-                      setShowAnswer(true);
                       setAnswerLoading(data.loading);
                       break;
                     default:
@@ -209,28 +230,6 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
       fetchSearchData();
     }
   }, [searchId, query]);
-
-  // Add wrapping step if there's a significant delay after reading step completes
-  useEffect(() => {
-    // If we're at reading step and have content blocks but no wrapping step yet
-    const readingStep = steps.find(step => step.type === "reading");
-    const hasWrappingStep = steps.some(step => step.type === "wrapping");
-    
-    if (currentStep === 2 && readingStep?.contentBlocks && !hasWrappingStep) {
-      // Add wrapping step and show answer section with loading state
-      const timeoutId = setTimeout(() => {
-        setSteps(prev => [...prev, { 
-          type: "wrapping", 
-          wrappingLoading: true 
-        }]);
-        setCurrentStep(3);
-        setShowAnswer(true);
-        setAnswerLoading(true);
-      }, 500); // Add a small delay to ensure we don't add it unnecessarily
-      
-      return () => clearTimeout(timeoutId);
-    }
-  }, [steps, currentStep]);
 
   const getStepIcon = (type: string, isActive: boolean, index: number) => {
     if (isActive && isLoading && index === currentStep) {
@@ -339,9 +338,10 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
                     </div>
                   </div>
                 )}
-                
+
                 {step.type === "wrapping" && step.wrappingLoading && (
                   <div className="flex justify-center mt-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-brand-pink" />
                   </div>
                 )}
               </div>
@@ -376,24 +376,24 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
                         color={index % 2 === 0 ? "pink" : "orange"}
                       />
                     )) || (
-                    <>
-                      <SourceCard
-                        name="Wikipedia"
-                        url="https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)"
-                        color="pink"
-                      />
-                      <SourceCard
-                        name="Drishti IAS"
-                        url="https://www.drishtiias.com/transformers-in-machine-learning"
-                        color="orange"
-                      />
-                      <SourceCard
-                        name="Polo Club"
-                        url="https://poloclub.github.io/llm-transformer-visualization/"
-                        color="pink"
-                      />
-                    </>
-                  )}
+                      <>
+                        <SourceCard
+                          name="Wikipedia"
+                          url="https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)"
+                          color="pink"
+                        />
+                        <SourceCard
+                          name="Drishti IAS"
+                          url="https://www.drishtiias.com/transformers-in-machine-learning"
+                          color="orange"
+                        />
+                        <SourceCard
+                          name="Polo Club"
+                          url="https://poloclub.github.io/llm-transformer-visualization/"
+                          color="pink"
+                        />
+                      </>
+                    )}
                 </div>
               </div>
             )}
