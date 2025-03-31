@@ -1,3 +1,4 @@
+//src/components/search-header.tsx
 "use client"
 
 import type React from "react"

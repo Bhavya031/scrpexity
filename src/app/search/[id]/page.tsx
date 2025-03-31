@@ -1,3 +1,4 @@
+"src/app/search/[id]/page.tsx"
 import { Suspense } from "react"
 import { notFound } from "next/navigation"
 import { SearchHeader } from "@/components/search-header"
