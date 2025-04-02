@@ -1,15 +1,12 @@
-// src/app/api/enhance-search/route.ts
-
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { ScrapybaraClient } from "scrapybara";
 import { bashTool, computerTool, editTool } from "scrapybara/tools";
-import { anthropic,UBUNTU_SYSTEM_PROMPT } from "scrapybara/anthropic";
+import { anthropic, UBUNTU_SYSTEM_PROMPT } from "scrapybara/anthropic";
 import { chromium } from "playwright";
-import { GoogleGenerativeAI,ChatSession } from "@google/generative-ai";
+import { GoogleGenerativeAI, ChatSession } from "@google/generative-ai";
 import * as dotenv from "dotenv";
 import { z } from "zod";
-import { json } from "stream/consumers";
 
 dotenv.config();
 
@@ -18,25 +15,25 @@ const ScrapeSchema = z.object({
   content: z.array(z.string()),
 });
 
-const ScrapeSchemaLink = z.object({
-  link: z.string().optional(),
-});
 type Scrape = z.infer<typeof ScrapeSchema>;
 
 export async function POST(request: Request) {
   const encoder = new TextEncoder();
 
   try {
-    const { query } = await request.json();
+    const { query, searchId } = await request.json();
+
     if (!query) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
     }
+
+    // Using the default user ID you provided
+    const user_id = "172af0e5-ea8b-4f32-877c-dc9f37bd2300";
 
     const stream = new ReadableStream({
       async start(controller) {
         const SCRAPYBARA_API_KEY = process.env.SCRAPYBARA_API_KEY || "";
         const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
-        const user_id = "00000000-0000-0000-0000-000000000000"; // 👈 Dummy user ID
 
         const client = new ScrapybaraClient({ apiKey: SCRAPYBARA_API_KEY });
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -70,14 +67,17 @@ export async function POST(request: Request) {
         const responseText = geminiQueryResult.response.text()
         const optimizedQuery = JSON.parse(responseText);
         const enhancedQuery = optimizedQuery["Search Term"];
-        console.log("enchaced quary:",enhancedQuery)
+        console.log("enhanced query:", enhancedQuery)
+        
+        // Use upsert with conflict handling on both user_id and query
         await supabase.from("searches").upsert([
           {
+            searchId,
             user_id,
             query,
             enhanced_query: enhancedQuery,
           }
-        ], { onConflict: "query" });
+        ], { onConflict: "user_id,query" });
         
         controller.enqueue(encoder.encode(JSON.stringify({ step: 1, enhancedQuery }) + '\n'));
 
@@ -89,14 +89,14 @@ export async function POST(request: Request) {
         const browser = await chromium.connectOverCDP(cdpUrl);
         const context = await browser.newContext({ viewport: { width: 1030, height: 700 } });
         const page = await context.newPage();
-        const anthro = anthropic({name: "claude-3-7-sonnet-20250219",apiKey: process.env.ANTHROPIC_API_KEY});
+        const anthro = anthropic({name: "claude-3-7-sonnet-20250219"});
 
         await page.goto("https://duckduckgo.com/");
         await client.act({
           model: anthro,
           tools: [bashTool(instance), computerTool(instance), editTool(instance)],
           system: UBUNTU_SYSTEM_PROMPT,
-          prompt: `DuckDuckGo is alredy loded. All you have to do is enter this query: ${enhancedQuery}, then press Enter. Don't search from Chrome's address bar, which takes you to Google's search results. Use DuckDuckGo's search bar instead. After that result is loaded stop and do nothing`,
+          prompt: `DuckDuckGo is already loaded. All you have to do is enter this query: ${enhancedQuery}, then press Enter. Don't search from Chrome's address bar, which takes you to Google's search results. Use DuckDuckGo's search bar instead. After that result is loaded stop and do nothing`,
           onStep: (step) => console.log(step.text),
         });
         console.log("step 2 done");
@@ -173,6 +173,8 @@ export async function POST(request: Request) {
             console.error(`Attempt ${attempt + 1} failed`, err);
           }
         }
+        
+        // Update with proper user_id
         await supabase.from("searches").update({
           sources: allResults,
         }).eq("query", query).eq("user_id", user_id);
@@ -200,9 +202,12 @@ export async function POST(request: Request) {
         const finalResult = await sumChat.sendMessage(finalInput);
         const summaryText = finalResult.response.text();
         console.log("step 4 done")
+        
+        // Update with proper user_id
         await supabase.from("searches").update({
           summary: summaryText,
           completed_at: new Date(),
+          completed: true,
         }).eq("query", query).eq("user_id", user_id);        
         controller.enqueue(encoder.encode(JSON.stringify({ step: 4, summary: summaryText, loading: false }) + '\n'));
 
