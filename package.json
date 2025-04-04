@@ -57,6 +57,8 @@
     "react-hook-form": "^7.54.1",
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.0",
+    "remark": "^15.0.1",
+    "remark-html": "^16.0.1",
     "scrapybara": "^2.4.7",
     "sonner": "^1.7.1",
     "tailwind-merge": "^2.5.5",

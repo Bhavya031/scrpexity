@@ -13,9 +13,9 @@ interface SearchPageProps {
 
 export default async function SearchPage({ params }: SearchPageProps) {
   const { id } = await params
-
+  const userId = "172af0e5-ea8b-4f32-877c-dc9f37bd2300";
   // Get the search from the database
-  const search = await getSearchById(id)
+  const search = await getSearchById(id, userId)
 
   if (!search) {
     notFound()

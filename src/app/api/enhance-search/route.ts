@@ -80,11 +80,13 @@ export async function POST(request: Request) {
         ], { onConflict: "user_id,query" });
         
         controller.enqueue(encoder.encode(JSON.stringify({ step: 1, enhancedQuery }) + '\n'));
-
+        const instance = await client.startUbuntu({ timeoutHours: 1 });
+        const streamUrlResponse = await instance.getStreamUrl();
+        const streamUrl = streamUrlResponse.streamUrl;
         // Step 2: Search with Scrapybara
         controller.enqueue(encoder.encode(JSON.stringify({ step: 2, message: "Searching initiated" }) + '\n'));
 
-        const instance = await client.startUbuntu({ timeoutHours: 1 });
+
         const { cdpUrl } = await instance.browser.start();
         const browser = await chromium.connectOverCDP(cdpUrl);
         const context = await browser.newContext({ viewport: { width: 1030, height: 700 } });
@@ -184,7 +186,34 @@ export async function POST(request: Request) {
 
         const summarizer = genAI.getGenerativeModel({
           model: "gemini-2.0-flash-lite",
-          systemInstruction: `Summarize multiple web links into markdown with proper citations.`,
+          systemInstruction: `Summarize multiple web links  with proper citations.
+Create clean HTML markup with Tailwind CSS classes for a [TOPIC] information card that I can paste directly into my React component. Do not include any React component structure, imports, or export statements - I only need the HTML portion.
+
+Format the content with these citation requirements:
+1. Add superscript citation numbers after sentences requiring references
+2. Format citations as: <a href="[URL]" className="text-[#ee4399] no-underline hover:underline"><sup>[NUMBER]</sup></a>
+3. Use exactly the color #ee4399 for all citation links
+4. Include a "References" section at the bottom with numbered entries
+5. Each reference should include the number, source title, and URL
+
+Apply these Tailwind CSS styling requirements:
+- Use mb-6 for paragraph spacing
+- Use font-bold for headings and key terms
+- Format bulleted lists appropriately
+- Design for a black background with white text (bg-black text-white)
+
+Please provide ONLY the HTML markup - no React component wrapper, no imports, no exports. Just the HTML content I can paste directly into my existing component's return statement.
+
+Example of desired citation format:
+"Quantum computing harnesses quantum mechanical phenomena <a href="https://example.com" className="text-[#ee4399] no-underline hover:underline"><sup>1</sup></a>."
+
+Example of desired reference format:
+<div className="mt-8">
+  <h2 className="text-xl font-bold mb-4">References</h2>
+  <ol className="list-decimal pl-5">
+    <li><a href="https://example.com" className="text-[#ee4399] no-underline hover:underline">Title of Reference</a></li>
+  </ol>
+</div>`,
         });
 
         const sumChat = summarizer.startChat({

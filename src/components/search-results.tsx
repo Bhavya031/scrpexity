@@ -35,18 +35,6 @@ interface SearchStep {
   }>;
   wrappingLoading?: boolean;
 }
-interface SearchData {
-  id: string;
-  user_id?: string;
-  query: string;
-  enhanced_query?: string;
-  sources: string | string[];
-  summary: string;
-  created_at?: string;
-  completed_at?: string;
-  completed: boolean;
-}
-type SourceItem = string | { link: string };
 
 export function SearchResults({ searchId, query }: SearchResultsProps) {
   const [steps, setSteps] = useState<SearchStep[]>([
@@ -63,47 +51,17 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
   const receivedStep4 = useRef(false);
   const isMounted = useRef(false);
 
-  
-  // Add this state with proper typing before useEffect
-  const [quickData, setQuickData] = useState<SearchData | null>(null);
-  
-  console.log("calling")
-  // Add this quick check before your main rendering logic
   useEffect(() => {
-    const checkIfCompleted = async () => {
-        try {
-            const userId = "172af0e5-ea8b-4f32-877c-dc9f37bd2300";
-            console.log("Checking search status for ID:", searchId);
-            const response = await fetch(`/api/check-search?id=${searchId}&userId=${userId}`);
-            const data = await response.json();
-            console.log("API response:", data); // Check the API response
-
-            if (data && data.completed) {
-                setQuickData(data);
-                console.log("Quick data set:", data); // Check if quickData is set correctly
-            }
-        } catch (error) {
-            console.error("Error checking search status:", error);
-        }
-    };
-
-    if (searchId) {
-        checkIfCompleted();
-    }
-}, [searchId]);
-  useEffect(() => {
-    if (quickData && !quickData.completed) { // only run if quickData is not null and not completed
-      if (!isMounted.current) {
-        console.log("you fucked up")
-        isMounted.current = true;
-        const fetchSearchData = async () => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      const fetchSearchData = async () => {
         try {
           const response = await fetch("/api/enhance-search", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ query, searchId }),
+            body: JSON.stringify({ query }),
           });
 
           if (!response.ok) {
@@ -271,8 +229,7 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
       };
       fetchSearchData();
     }
-  }
-}, [searchId, query]);
+  }, [searchId, query]);
 
   const getStepIcon = (type: string, isActive: boolean, index: number) => {
     if (isActive && isLoading && index === currentStep) {
@@ -312,42 +269,6 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
     }
   };
 
-  if (quickData) {
-    console.log("Rendering with quickData:", quickData); // Check if rendering with quickData
-
-    return (
-      <div className="space-y-6">
-        <h1 className="text-3xl font-bold">{quickData.query}</h1>
-        
-        <div className="rounded-lg border bg-card p-6 shadow-md">
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            <h2 className="text-xl font-semibold mb-4">Answer</h2>
-            <div className="whitespace-pre-line">{quickData.summary}</div>
-            
-            <div className="mt-8 pt-4 border-t">
-              <h3 className="text-sm font-medium mb-2">Sources</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {(typeof quickData.sources === 'string'
-              ? JSON.parse(quickData.sources)
-              : quickData.sources || []).map((source: SourceItem, index: number) => {
-              const url = typeof source === 'string' ? source : source.link;
-
-              return (
-                  <SourceCard
-                      key={index}
-                      name={`Source ${index + 1}`}
-                      url={url}
-                      color={index % 2 === 0 ? "pink" : "orange"}
-                  />
-              );
-              })}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">{query}</h1>
