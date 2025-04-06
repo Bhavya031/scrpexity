@@ -23,7 +23,6 @@ export async function getSearchById(searchId: string, userId: string) {
   try {
     // Check if either parameter is undefined before querying
     if (!searchId || !userId) {
-      console.log("Missing required parameters:", { searchId, userId });
       return null;
     }
 
@@ -37,7 +36,6 @@ export async function getSearchById(searchId: string, userId: string) {
     if (error) {
       // For "not found" errors, return null without raising alarm
       if (error.code === "PGRST116") {
-        console.log("Search not found, this is expected for new searches");
         return null;
       }
       

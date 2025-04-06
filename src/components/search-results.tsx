@@ -7,7 +7,7 @@ import {
   Search,
   BookOpen,
   Sparkles,
-  Wand2,
+  Wand2, AlertCircle, XCircle
 } from "lucide-react";
 import { StreamButton } from "@/components/ui/stream-button"
 import { quary } from "@/lib/clientCache"
@@ -35,6 +35,7 @@ interface SearchStep {
     url: string;
   }>;
   wrappingLoading?: boolean;
+  streamUrl?: string;  // Add this line
 }
 
 interface SearchData {
@@ -48,7 +49,27 @@ interface SearchData {
   completed_at?: string;
   completed: boolean;
 }
-
+function ErrorAlert({ message, onClose }: { message: string, onClose: () => void }) {
+  return (
+    <div className="relative bg-destructive/15 border border-destructive rounded-lg p-4 mb-6">
+      <div className="flex items-start">
+        <AlertCircle className="h-5 w-5 text-destructive mt-0.5 mr-3" />
+        <div className="flex-1">
+          <h3 className="font-medium text-destructive">Search Error</h3>
+          <p className="text-sm text-destructive/90 mt-1">{message}</p>
+        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="text-destructive/70 hover:text-destructive"
+          >
+            <XCircle className="h-5 w-5" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 type SourceItem = string | { link: string };
 
 export function SearchResults({ searchId }: SearchResultsProps) {
@@ -66,32 +87,30 @@ export function SearchResults({ searchId }: SearchResultsProps) {
   const [searchNotFound, setSearchNotFound] = useState(false);
   const [initialCheckComplete, setInitialCheckComplete] = useState(false);
   const [queryValue, setQueryValue] = useState<string | null>(null);
+  const [error, setError] = useState<{ type: string; message: string } | null>(null);
 
   // Track if we've received the step 4 event
   const receivedStep4 = useRef(false);
   const isMounted = useRef(false);
-  
+
   // Move the localStorage access to useEffect to ensure it only runs client-side
   useEffect(() => {
     const queryFromStorage = quary(searchId);
-    console.log("local data is here")
     setQueryValue(queryFromStorage || searchId); // Fallback to searchId if storage value is null
     setCheckCompleted(true);
   }, [searchId]);
-  
+
   // First, check if the search already exists in the database
   useEffect(() => {
     if (!queryValue) return; // Don't proceed until we have a query value
-    
+
     const checkIfCompleted = async () => {
       try {
         const userId = "172af0e5-ea8b-4f32-877c-dc9f37bd2300";
-        console.log("Checking search status for ID:", searchId);
         const response = await fetch(`/api/check-search?id=${searchId}&userId=${userId}`);
 
         if (!response.ok) {
           if (response.status === 404) {
-            console.log("Search not found, proceeding with new search");
             setQuickData(null);
             setSearchNotFound(true);
             setInitialCheckComplete(true);
@@ -101,19 +120,16 @@ export function SearchResults({ searchId }: SearchResultsProps) {
         }
 
         const data = await response.json();
-        console.log("API response:", data);
 
         if (data && data.completed === true) {
           setQuickData(data);
           setSearchNotFound(false);
         } else {
-          console.log("Search not completed", data);
           setQuickData(null);
           setSearchNotFound(false);
         }
         setInitialCheckComplete(true);
       } catch (error) {
-        console.error("Error checking search status:", error);
         setQuickData(null);
         setSearchNotFound(false);
         setInitialCheckComplete(true);
@@ -124,22 +140,24 @@ export function SearchResults({ searchId }: SearchResultsProps) {
       checkIfCompleted();
     }
   }, [searchId, queryValue]);
+  const dismissError = () => {
+    setError(null);
+  };
 
+  // Main search logic - only runs if the previous check didn't find a completed search
   // Main search logic - only runs if the previous check didn't find a completed search
   useEffect(() => {
     if (!initialCheckComplete || !queryValue) {
       return; // Wait for the check to complete and query to be available
     }
-    
+
     if (quickData) {
-      console.log("Using cached search data, no need to start new search ");
       setIsLoading(false);
       return;
     }
-    
-    console.log("Starting new search");
+
     isMounted.current = true;
-    
+
     const fetchSearchData = async () => {
       try {
         const response = await fetch("/api/enhance-search", {
@@ -160,6 +178,11 @@ export function SearchResults({ searchId }: SearchResultsProps) {
 
         if (!reader) {
           console.error("Response body reader is null.");
+          setError({
+            type: "reader_error",
+            message: "Failed to establish data stream. Please try again."
+          });
+          setIsLoading(false);
           return;
         }
 
@@ -178,7 +201,16 @@ export function SearchResults({ searchId }: SearchResultsProps) {
             if (part) {
               try {
                 const data = JSON.parse(part);
-                console.log("Received data:", data);
+
+                // Handle error messages from the server
+                if (data.error) {
+                  setError({
+                    type: data.errorType || "unknown",
+                    message: data.message || "An unexpected error occurred."
+                  });
+                  setIsLoading(false);
+                  return; // Stop processing the stream
+                }
 
                 switch (data.step) {
                   case 1:
@@ -195,7 +227,11 @@ export function SearchResults({ searchId }: SearchResultsProps) {
                   case 2:
                     setSteps((prev) => [
                       ...prev,
-                      { type: "searching", message: data.message },
+                      {
+                        type: "searching",
+                        message: "Searching initiated", // Hardcoded message or use a default
+                        streamUrl: data.streamUrl // Store streamUrl separately
+                      },
                     ]);
                     setCurrentStep(1);
                     break;
@@ -310,11 +346,20 @@ export function SearchResults({ searchId }: SearchResultsProps) {
         }
       } catch (error) {
         console.error("Error fetching search data:", error);
+        setError({
+          type: "fetch_error",
+          message: "Failed to connect to search service. Please try again later."
+        });
         setIsLoading(false);
       }
     };
 
     fetchSearchData();
+
+    // Cleanup function
+    return () => {
+      isMounted.current = false;
+    };
   }, [searchId, queryValue, quickData, initialCheckComplete]);
 
   const getStepIcon = (type: string, isActive: boolean, index: number) => {
@@ -366,7 +411,6 @@ export function SearchResults({ searchId }: SearchResultsProps) {
 
   // Render the cached result if we have it
   if (quickData && quickData.completed) {
-    console.log("Rendering with quickData:", quickData);
 
     return (
       <div className="space-y-6">
@@ -405,12 +449,18 @@ export function SearchResults({ searchId }: SearchResultsProps) {
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">{queryValue}</h1>
+      {error && (
+        <ErrorAlert
+          message={error.message}
+          onClose={dismissError}
+        />
+      )}
 
       <div className="space-y-6 mb-8">
         {steps.map((step, index) => (
           <div
             key={index}
-            className={`rounded-lg border p-4 ${getStepColor(
+            className={`rounded-lg border p-4 relative ${getStepColor(
               step.type,
               index
             )}`}
@@ -453,6 +503,16 @@ export function SearchResults({ searchId }: SearchResultsProps) {
                     </div>
                   )}
 
+                {step.type === "searching" && step.streamUrl && (
+                  <div className="mt-4 flex justify-end">
+                    <StreamButton
+                      streamUrl={step.streamUrl}
+                      variant="outline"
+                      size="sm"
+                    />
+                  </div>
+                )}
+
                 {step.type === "reading" && step.readingLinks && (
                   <div className="mt-4 space-y-2">
                     <h4 className="text-xs font-medium text-muted-foreground">
@@ -487,9 +547,9 @@ export function SearchResults({ searchId }: SearchResultsProps) {
           <div className="prose prose-sm dark:prose-invert max-w-none">
             <h2 className="text-xl font-semibold mb-4">Answer</h2>
             {answerLoading ? (
-              <><StreamButton streamUrl="https://v0.dev/chat/fork-of-scrpexity-chat-interface-F0qwSbrwwfS?b=b_ooS7lVELzKA"></StreamButton><div className="flex justify-center py-8">
+              <div className="flex justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin text-brand-pink" />
-              </div></>
+              </div>
             ) : (
               <div dangerouslySetInnerHTML={{ __html: result || '' }}></div>
             )}
@@ -507,25 +567,7 @@ export function SearchResults({ searchId }: SearchResultsProps) {
                         url={link.url}
                         color={index % 2 === 0 ? "pink" : "orange"}
                       />
-                    )) || (
-                      <>
-                        <SourceCard
-                          name="Wikipedia"
-                          url="https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)"
-                          color="pink"
-                        />
-                        <SourceCard
-                          name="Drishti IAS"
-                          url="https://www.drishtiias.com/transformers-in-machine-learning"
-                          color="orange"
-                        />
-                        <SourceCard
-                          name="Polo Club"
-                          url="https://poloclub.github.io/llm-transformer-visualization/"
-                          color="pink"
-                        />
-                      </>
-                    )}
+                    ))}
                 </div>
               </div>
             )}

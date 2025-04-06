@@ -80,13 +80,25 @@ export async function POST(request: Request) {
         ], { onConflict: "user_id,query" });
         
         controller.enqueue(encoder.encode(JSON.stringify({ step: 1, enhancedQuery }) + '\n'));
-        const instance = await client.startUbuntu({ timeoutHours: 1 });
-        const streamUrlResponse = await instance.getStreamUrl();
-        const streamUrl = streamUrlResponse.streamUrl;
-        // Step 2: Search with Scrapybara
-        controller.enqueue(encoder.encode(JSON.stringify({ step: 2, message: "Searching initiated" }) + '\n'));
+        let instance;
+        try {
+          instance = await client.startUbuntu({ timeoutHours: 1 });
+          const streamUrlResponse = await instance.getStreamUrl();
+          const streamUrl = streamUrlResponse.streamUrl;
+          controller.enqueue(encoder.encode(JSON.stringify({ step: 2, streamUrl }) + '\n'));
+        } catch (err) {
+          console.error("Error starting Scrapybara instance:", err);
+          // Send error to client
+          controller.enqueue(encoder.encode(JSON.stringify({ 
+            error: true, 
+            errorType: "session_limit",
+            message: "Unable to start search session. Session limit reached." 
+          }) + '\n'));
+          controller.close();
+          return;
+        }
 
-
+        
         const { cdpUrl } = await instance.browser.start();
         const browser = await chromium.connectOverCDP(cdpUrl);
         const context = await browser.newContext({ viewport: { width: 1030, height: 700 } });
@@ -171,12 +183,53 @@ export async function POST(request: Request) {
             });
 
             if (allResults.length >= 3) break;
-          } catch (err) {
+          } catch (err: any) {
             console.error(`Attempt ${attempt + 1} failed`, err);
+            
+            // Check for specific error messages
+            const errorMsg = err?.body?.detail || "";
+            if (errorMsg.includes("No agent credits remaining")) {
+              controller.enqueue(encoder.encode(JSON.stringify({ 
+                error: true, 
+                errorType: "credits_exhausted",
+                message: "Search credits exhausted. Please try again later." 
+              }) + '\n'));
+              
+              // Update search with error status
+              await supabase.from("searches").update({
+                error: "Credits exhausted",
+                completed_at: new Date(),
+                completed: false,
+              }).eq("query", query).eq("user_id", user_id);
+              
+              // Clean up and exit
+              if (browser) await browser.close();
+              if (instance) await instance.stop();
+              controller.close();
+              return;
+            }
+            
+            if (errorMsg.includes("Running session cap reached")) {
+              controller.enqueue(encoder.encode(JSON.stringify({ 
+                error: true, 
+                errorType: "session_limit",
+                message: "Search session limit reached. Please try again later." 
+              }) + '\n'));
+              
+              // Update search with error status
+              await supabase.from("searches").update({
+                error: "Session limit reached",
+                completed_at: new Date(),
+                completed: false,
+              }).eq("query", query).eq("user_id", user_id);
+              
+              // Clean up and exit
+              if (instance) await instance.stop();
+              controller.close();
+              return;
+            }
           }
         }
-        
-        // Update with proper user_id
         await supabase.from("searches").update({
           sources: allResults,
         }).eq("query", query).eq("user_id", user_id);

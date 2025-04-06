@@ -25,7 +25,6 @@ export function SearchHeader({ pageid }: SearchHeaderProps) {
   const [checkCompleted, setCheckCompleted] = useState(false);
   useEffect(() => {
     const queryFromStorage = quary(pageid);
-    console.log("local data is here")
     setSearchQuery(queryFromStorage || pageid); // Fallback to searchId if storage value is null
     setCheckCompleted(true);
   }, [pageid]);
