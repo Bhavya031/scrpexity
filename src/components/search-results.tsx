@@ -9,10 +9,11 @@ import {
   Sparkles,
   Wand2,
 } from "lucide-react";
+import { StreamButton } from "@/components/ui/stream-button"
+import { quary } from "@/lib/clientCache"
 
 interface SearchResultsProps {
   searchId: string;
-  query: string;
 }
 
 interface SearchStep {
@@ -36,7 +37,21 @@ interface SearchStep {
   wrappingLoading?: boolean;
 }
 
-export function SearchResults({ searchId, query }: SearchResultsProps) {
+interface SearchData {
+  id: string;
+  user_id?: string;
+  query: string;
+  enhanced_query?: string;
+  sources: string | string[];
+  summary: string;
+  created_at?: string;
+  completed_at?: string;
+  completed: boolean;
+}
+
+type SourceItem = string | { link: string };
+
+export function SearchResults({ searchId }: SearchResultsProps) {
   const [steps, setSteps] = useState<SearchStep[]>([
     { type: "enhancing", enhancedQueryLoaded: false },
   ]);
@@ -46,190 +61,254 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
   const [enhancedQuery, setEnhancedQuery] = useState<string | null>(null);
   const [showAnswer, setShowAnswer] = useState(false);
   const [answerLoading, setAnswerLoading] = useState(false);
-  
+  const [quickData, setQuickData] = useState<SearchData | null>(null);
+  const [checkCompleted, setCheckCompleted] = useState(false);
+  // Add this state with proper typing before useEffect
+  const [searchNotFound, setSearchNotFound] = useState(false); // NEW STATE
+  const [initialCheckComplete, setInitialCheckComplete] = useState(false); // Renamed for clarity
+
   // Track if we've received the step 4 event
   const receivedStep4 = useRef(false);
   const isMounted = useRef(false);
-
+  const query = quary(searchId);
+  console.log(query)
+  // First, check if the search already exists in the database
   useEffect(() => {
-    if (!isMounted.current) {
-      isMounted.current = true;
-      const fetchSearchData = async () => {
-        try {
-          const response = await fetch("/api/enhance-search", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ query }),
-          });
+    const checkIfCompleted = async () => {
+      try {
+        const userId = "172af0e5-ea8b-4f32-877c-dc9f37bd2300";
+        console.log("Checking search status for ID:", searchId);
+        const response = await fetch(`/api/check-search?id=${searchId}&userId=${userId}`);
 
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          const reader = response.body?.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
-
-          if (!reader) {
-            console.error("Response body reader is null.");
+        if (!response.ok) {
+          if (response.status === 404) {
+            console.log("Search not found, proceeding with new search");
+            setQuickData(null);
+            setSearchNotFound(true); // Set the flag for not found
+            setInitialCheckComplete(true);
             return;
           }
+          throw new Error(`API returned ${response.status}`);
+        }
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-              setIsLoading(false);
-              break;
-            }
+        const data = await response.json();
+        console.log("API response:", data);
 
-            buffer += decoder.decode(value, { stream: true });
-            const parts = buffer.split("\n");
-            buffer = parts.pop() || "";
+        if (data && data.completed === true) {
+          setQuickData(data);
+          setSearchNotFound(false);
+        } else {
+          console.log("Search not completed", data);
+          setQuickData(null);
+          setSearchNotFound(false); // Reset the flag if it was somehow set
+        }
+        setInitialCheckComplete(true);
+      } catch (error) {
+        console.error("Error checking search status:", error);
+        setQuickData(null);
+        setSearchNotFound(false); // Reset the flag on error
+        setInitialCheckComplete(true);
+      }
+    };
 
-            for (const part of parts) {
-              if (part) {
-                try {
-                  const data = JSON.parse(part);
-                  console.log("Received data:", data);
+    if (searchId) {
+      checkIfCompleted();
+    }
+  }, [searchId]);
+  console.log("workings")
+  // Main search logic - only runs if the previous check didn't find a completed search
+  useEffect(() => {
+    notFound:
+    console.log("this is coming here ")
+    if (!checkCompleted) {
+      return; // Wait for the check to complete
+    }
+    
+    if (quickData) {
+      console.log("Using cached search data, no need to start new search ");
+      setIsLoading(false);
+      return;
+    }
+    
+    console.log("Starting new search");
+    isMounted.current = true;
+    
+    const fetchSearchData = async () => {
+      try {
+        const response = await fetch("/api/enhance-search", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ query, searchId }),
+        });
 
-                  switch (data.step) {
-                    case 1:
-                      setEnhancedQuery(data.enhancedQuery);
-                      setSteps([
-                        {
-                          type: "enhancing",
-                          enhancedQuery: data.enhancedQuery,
-                          enhancedQueryLoaded: true,
-                        },
-                      ]);
-                      setCurrentStep(0);
-                      break;
-                    case 2:
-                      setSteps((prev) => [
-                        ...prev,
-                        { type: "searching", message: data.message },
-                      ]);
-                      setCurrentStep(1);
-                      break;
-                    case 3:
-                      setSteps((prev) => {
-                        const newReadingLinks = data.link
-                          ? [
-                              ...(prev.find((step) => step.type === "reading")
-                                ?.readingLinks || []),
-                              {
-                                name: `Source ${(
-                                  prev.find((step) => step.type === "reading")
-                                    ?.readingLinks || []
-                                ).length + 1}`,
-                                url: data.link,
-                              },
-                            ]
-                          : prev.find((step) => step.type === "reading")
-                              ?.readingLinks || [];
-                        const readingStepIndex = prev.findIndex(
-                          (step) => step.type === "reading"
-                        );
-                        if (readingStepIndex !== -1) {
-                          return prev.map((step, index) =>
-                            index === readingStepIndex
-                              ? {
-                                  ...step,
-                                  readingLinks: newReadingLinks,
-                                  contentBlocks: data.contentBlocks,
-                                  error: data.error,
-                                }
-                              : step
-                          );
-                        } else {
-                          return [
-                            ...prev,
-                            {
-                              type: "reading",
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        if (!reader) {
+          console.error("Response body reader is null.");
+          return;
+        }
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            setIsLoading(false);
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n");
+          buffer = parts.pop() || "";
+
+          for (const part of parts) {
+            if (part) {
+              try {
+                const data = JSON.parse(part);
+                console.log("Received data:", data);
+
+                switch (data.step) {
+                  case 1:
+                    setEnhancedQuery(data.enhancedQuery);
+                    setSteps([
+                      {
+                        type: "enhancing",
+                        enhancedQuery: data.enhancedQuery,
+                        enhancedQueryLoaded: true,
+                      },
+                    ]);
+                    setCurrentStep(0);
+                    break;
+                  case 2:
+                    setSteps((prev) => [
+                      ...prev,
+                      { type: "searching", message: data.message },
+                    ]);
+                    setCurrentStep(1);
+                    break;
+                  case 3:
+                    setSteps((prev) => {
+                      const newReadingLinks = data.link
+                        ? [
+                          ...(prev.find((step) => step.type === "reading")
+                            ?.readingLinks || []),
+                          {
+                            name: `Source ${(
+                              prev.find((step) => step.type === "reading")
+                                ?.readingLinks || []
+                            ).length + 1}`,
+                            url: data.link,
+                          },
+                        ]
+                        : prev.find((step) => step.type === "reading")
+                          ?.readingLinks || [];
+                      const readingStepIndex = prev.findIndex(
+                        (step) => step.type === "reading"
+                      );
+                      if (readingStepIndex !== -1) {
+                        return prev.map((step, index) =>
+                          index === readingStepIndex
+                            ? {
+                              ...step,
                               readingLinks: newReadingLinks,
                               contentBlocks: data.contentBlocks,
                               error: data.error,
-                            },
-                          ];
+                            }
+                            : step
+                        );
+                      } else {
+                        return [
+                          ...prev,
+                          {
+                            type: "reading",
+                            readingLinks: newReadingLinks,
+                            contentBlocks: data.contentBlocks,
+                            error: data.error,
+                          },
+                        ];
+                      }
+                    });
+                    setCurrentStep(2);
+                    break;
+                  case 4:
+                    // Only add the wrapping step if we haven't done so already
+                    if (!receivedStep4.current) {
+                      receivedStep4.current = true;
+                      setCurrentStep(3);
+
+                      setSteps((prev) => {
+                        // Check if wrapping step already exists
+                        const wrappingIndex = prev.findIndex(step => step.type === "wrapping");
+
+                        if (wrappingIndex === -1) {
+                          // Add the wrapping step if it doesn't exist
+                          return [...prev, {
+                            type: "wrapping",
+                            wrappingLoading: data.loading,
+                            summary: data.loading ? undefined : data.summary
+                          }];
+                        } else {
+                          // Update the existing wrapping step
+                          return prev.map((step, index) =>
+                            index === wrappingIndex
+                              ? {
+                                ...step,
+                                wrappingLoading: data.loading,
+                                summary: data.loading ? undefined : data.summary
+                              }
+                              : step
+                          );
                         }
                       });
-                      setCurrentStep(2);
-                      break;
-                    case 4:
-                      // Only add the wrapping step if we haven't done so already
-                      if (!receivedStep4.current) {
-                        receivedStep4.current = true;
-                        setCurrentStep(3);
-                        
-                        setSteps((prev) => {
-                          // Check if wrapping step already exists
-                          const wrappingIndex = prev.findIndex(step => step.type === "wrapping");
-                          
-                          if (wrappingIndex === -1) {
-                            // Add the wrapping step if it doesn't exist
-                            return [...prev, {
-                              type: "wrapping",
-                              wrappingLoading: data.loading,
-                              summary: data.loading ? undefined : data.summary
-                            }];
-                          } else {
-                            // Update the existing wrapping step
-                            return prev.map((step, index) => 
-                              index === wrappingIndex 
-                                ? { 
-                                    ...step, 
-                                    wrappingLoading: data.loading,
-                                    summary: data.loading ? undefined : data.summary 
-                                  }
-                                : step
-                            );
-                          }
-                        });
-                        
-                        // Only show answer section when we receive step 4
-                        setShowAnswer(true);
-                      } else {
-                        // Just update the wrapping loading state and summary
-                        setSteps((prev) => {
-                          const wrappingIndex = prev.findIndex(step => step.type === "wrapping");
-                          
-                          if (wrappingIndex !== -1) {
-                            return prev.map((step, index) => 
-                              index === wrappingIndex 
-                                ? { 
-                                    ...step, 
-                                    wrappingLoading: data.loading,
-                                    summary: data.loading ? step.summary : data.summary 
-                                  }
-                                : step
-                            );
-                          }
-                          return prev;
-                        });
-                      }
-                      
-                      setResult(data.summary);
-                      setAnswerLoading(data.loading);
-                      break;
-                    default:
-                      console.warn("Unknown step:", data.step);
-                  }
-                } catch (e) {
-                  console.error("Error parsing JSON:", e, part);
+
+                      // Only show answer section when we receive step 4
+                      setShowAnswer(true);
+                    } else {
+                      // Just update the wrapping loading state and summary
+                      setSteps((prev) => {
+                        const wrappingIndex = prev.findIndex(step => step.type === "wrapping");
+
+                        if (wrappingIndex !== -1) {
+                          return prev.map((step, index) =>
+                            index === wrappingIndex
+                              ? {
+                                ...step,
+                                wrappingLoading: data.loading,
+                                summary: data.loading ? step.summary : data.summary
+                              }
+                              : step
+                          );
+                        }
+                        return prev;
+                      });
+                    }
+
+                    setResult(data.summary);
+                    setAnswerLoading(data.loading);
+                    break;
+                  default:
+                    console.warn("Unknown step:", data.step);
                 }
+              } catch (e) {
+                console.error("Error parsing JSON:", e, part);
               }
             }
           }
-        } catch (error) {
-          console.error("Error fetching search data:", error);
-          setIsLoading(false);
         }
-      };
-      fetchSearchData();
-    }
-  }, [searchId, query]);
+      } catch (error) {
+        console.error("Error fetching search data:", error);
+        setIsLoading(false);
+      }
+    };
+
+    fetchSearchData();
+  }, [searchId, query, quickData, checkCompleted]);
 
   const getStepIcon = (type: string, isActive: boolean, index: number) => {
     if (isActive && isLoading && index === currentStep) {
@@ -269,6 +348,44 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
     }
   };
 
+  // Render the cached result if we have it
+  if (quickData && quickData.completed) {
+    console.log("Rendering with quickData:", quickData);
+
+    return (
+      <div className="space-y-6">
+        <h1 className="text-3xl font-bold">{quickData.query}</h1>
+        <div className="rounded-lg border bg-card p-6 shadow-md">
+          <div className="prose prose-sm dark:prose-invert max-w-none">
+            <h2 className="text-xl font-semibold mb-4">Answer</h2>
+            <div dangerouslySetInnerHTML={{ __html: quickData.summary }}></div>
+
+            <div className="mt-8 pt-4 border-t">
+              <h3 className="text-sm font-medium mb-2">Sources</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {(typeof quickData.sources === 'string'
+                  ? JSON.parse(quickData.sources)
+                  : quickData.sources || []).map((source: SourceItem, index: number) => {
+                    const url = typeof source === 'string' ? source : source.link;
+
+                    return (
+                      <SourceCard
+                        key={index}
+                        name={`Source ${index + 1}`}
+                        url={url}
+                        color={index % 2 === 0 ? "pink" : "orange"}
+                      />
+                    );
+                  })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render the search in progress view
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">{query}</h1>
@@ -302,8 +419,7 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
                   {step.type === "enhancing" &&
                     "Optimizing your query for better results"}
                   {step.type === "searching" &&
-                    `Finding relevant information about "${
-                      enhancedQuery || query
+                    `Finding relevant information about "${enhancedQuery || query
                     }"`}
                   {step.type === "reading" &&
                     "Analyzing content from multiple sources"}
@@ -355,11 +471,11 @@ export function SearchResults({ searchId, query }: SearchResultsProps) {
           <div className="prose prose-sm dark:prose-invert max-w-none">
             <h2 className="text-xl font-semibold mb-4">Answer</h2>
             {answerLoading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-brand-pink"/>
-              </div>
+              <><StreamButton streamUrl="https://v0.dev/chat/fork-of-scrpexity-chat-interface-F0qwSbrwwfS?b=b_ooS7lVELzKA"></StreamButton><div className="flex justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-brand-pink" />
+              </div></>
             ) : (
-              <div className="whitespace-pre-line">{result}</div>
+              <div dangerouslySetInnerHTML={{ __html: result || '' }}></div>
             )}
 
             {!answerLoading && result && (
