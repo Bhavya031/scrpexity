@@ -63,17 +63,26 @@ export function SearchResults({ searchId }: SearchResultsProps) {
   const [answerLoading, setAnswerLoading] = useState(false);
   const [quickData, setQuickData] = useState<SearchData | null>(null);
   const [checkCompleted, setCheckCompleted] = useState(false);
-  // Add this state with proper typing before useEffect
-  const [searchNotFound, setSearchNotFound] = useState(false); // NEW STATE
-  const [initialCheckComplete, setInitialCheckComplete] = useState(false); // Renamed for clarity
+  const [searchNotFound, setSearchNotFound] = useState(false);
+  const [initialCheckComplete, setInitialCheckComplete] = useState(false);
+  const [queryValue, setQueryValue] = useState<string | null>(null);
 
   // Track if we've received the step 4 event
   const receivedStep4 = useRef(false);
   const isMounted = useRef(false);
-  const query = quary(searchId);
-  console.log(query)
+  
+  // Move the localStorage access to useEffect to ensure it only runs client-side
+  useEffect(() => {
+    const queryFromStorage = quary(searchId);
+    console.log("local data is here")
+    setQueryValue(queryFromStorage || searchId); // Fallback to searchId if storage value is null
+    setCheckCompleted(true);
+  }, [searchId]);
+  
   // First, check if the search already exists in the database
   useEffect(() => {
+    if (!queryValue) return; // Don't proceed until we have a query value
+    
     const checkIfCompleted = async () => {
       try {
         const userId = "172af0e5-ea8b-4f32-877c-dc9f37bd2300";
@@ -84,7 +93,7 @@ export function SearchResults({ searchId }: SearchResultsProps) {
           if (response.status === 404) {
             console.log("Search not found, proceeding with new search");
             setQuickData(null);
-            setSearchNotFound(true); // Set the flag for not found
+            setSearchNotFound(true);
             setInitialCheckComplete(true);
             return;
           }
@@ -100,13 +109,13 @@ export function SearchResults({ searchId }: SearchResultsProps) {
         } else {
           console.log("Search not completed", data);
           setQuickData(null);
-          setSearchNotFound(false); // Reset the flag if it was somehow set
+          setSearchNotFound(false);
         }
         setInitialCheckComplete(true);
       } catch (error) {
         console.error("Error checking search status:", error);
         setQuickData(null);
-        setSearchNotFound(false); // Reset the flag on error
+        setSearchNotFound(false);
         setInitialCheckComplete(true);
       }
     };
@@ -114,14 +123,12 @@ export function SearchResults({ searchId }: SearchResultsProps) {
     if (searchId) {
       checkIfCompleted();
     }
-  }, [searchId]);
-  console.log("workings")
+  }, [searchId, queryValue]);
+
   // Main search logic - only runs if the previous check didn't find a completed search
   useEffect(() => {
-    notFound:
-    console.log("this is coming here ")
-    if (!checkCompleted) {
-      return; // Wait for the check to complete
+    if (!initialCheckComplete || !queryValue) {
+      return; // Wait for the check to complete and query to be available
     }
     
     if (quickData) {
@@ -140,7 +147,7 @@ export function SearchResults({ searchId }: SearchResultsProps) {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ query, searchId }),
+          body: JSON.stringify({ query: queryValue, searchId }),
         });
 
         if (!response.ok) {
@@ -308,7 +315,7 @@ export function SearchResults({ searchId }: SearchResultsProps) {
     };
 
     fetchSearchData();
-  }, [searchId, query, quickData, checkCompleted]);
+  }, [searchId, queryValue, quickData, initialCheckComplete]);
 
   const getStepIcon = (type: string, isActive: boolean, index: number) => {
     if (isActive && isLoading && index === currentStep) {
@@ -347,6 +354,15 @@ export function SearchResults({ searchId }: SearchResultsProps) {
       return "bg-background";
     }
   };
+
+  // Show a loading state if we're still initializing
+  if (!initialCheckComplete || !queryValue) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-pink" />
+      </div>
+    );
+  }
 
   // Render the cached result if we have it
   if (quickData && quickData.completed) {
@@ -388,7 +404,7 @@ export function SearchResults({ searchId }: SearchResultsProps) {
   // Render the search in progress view
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">{query}</h1>
+      <h1 className="text-3xl font-bold">{queryValue}</h1>
 
       <div className="space-y-6 mb-8">
         {steps.map((step, index) => (
@@ -419,7 +435,7 @@ export function SearchResults({ searchId }: SearchResultsProps) {
                   {step.type === "enhancing" &&
                     "Optimizing your query for better results"}
                   {step.type === "searching" &&
-                    `Finding relevant information about "${enhancedQuery || query
+                    `Finding relevant information about "${enhancedQuery || queryValue
                     }"`}
                   {step.type === "reading" &&
                     "Analyzing content from multiple sources"}

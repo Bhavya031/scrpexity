@@ -15,18 +15,15 @@ export default async function SearchPage({ params }: SearchPageProps) {
   const { id } = await params
   const userId = "172af0e5-ea8b-4f32-877c-dc9f37bd2300";
   // Get the search from the database
-  const search = await getSearchById(id, userId)
+  
 
-  if (!search) {
-    notFound()
-  }
 
   return (
     <main className="flex min-h-screen flex-col">
-      <SearchHeader query={search.query} />
+      <SearchHeader pageid={id} />
       <div className="flex-1 container max-w-4xl mx-auto px-4 py-6">
         <Suspense fallback={<SearchLoadingSkeleton />}>
-          <SearchResults searchId={id} query={search.query} />
+          <SearchResults searchId={id} />
         </Suspense>
       </div>
     </main>
