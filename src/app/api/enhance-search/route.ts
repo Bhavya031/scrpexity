@@ -92,7 +92,7 @@ export async function POST(request: Request) {
           controller.enqueue(encoder.encode(JSON.stringify({ 
             error: true, 
             errorType: "session_limit",
-            message: "Unable to start search session. Session limit reached." 
+            message: "Unable to start search session. Session limit reached. stop one instanse to start this." 
           }) + '\n'));
           controller.close();
           return;
@@ -106,14 +106,28 @@ export async function POST(request: Request) {
         const anthro = anthropic({name: "claude-3-7-sonnet-20250219"});
 
         await page.goto("https://duckduckgo.com/");
-        await client.act({
+        try {await client.act({
           model: anthro,
           tools: [bashTool(instance), computerTool(instance), editTool(instance)],
           system: UBUNTU_SYSTEM_PROMPT,
           prompt: `DuckDuckGo is already loaded. All you have to do is enter this query: ${enhancedQuery}, then press Enter. Don't search from Chrome's address bar, which takes you to Google's search results. Use DuckDuckGo's search bar instead. After that result is loaded stop and do nothing`,
           onStep: (step) => console.log(step.text),
         });
-        console.log("step 2 done");
+        console.log("step 2 done");}
+        catch (err: any){
+          const errorMsg = err?.body?.detail || "";
+            if (errorMsg.includes("No agent credits remaining")) {
+              controller.enqueue(encoder.encode(JSON.stringify({ 
+                error: true, 
+                errorType: "credits_exhausted",
+                message: "Search credits exhausted. No agent credits remaining. Please upgrade your scrapybara plan." 
+              }) + '\n'));
+              if (browser) await browser.close();
+              if (instance) await instance.stop();
+              controller.close();
+              return;
+            }
+        }
         const lastLink: (string | null)[] = [null];
         const allResults: Scrape[] = [];
 

@@ -1,9 +1,18 @@
 import { HomeSearch } from "@/components/home-search"
 import { Logo } from "@/components/logo"
-
-export default function Home() {
+import { auth } from "@/lib/auth"
+import { Navbar } from "@/components/navbar"
+export default async function Home() {
+  const session = await auth()
+  
+  if (!session) {
+    // Handle unauthenticated state - you might want to use redirect() here
+    // or render a different UI
+    return <div>Please sign in to access this page</div>
+  }
   return (
     <main className="flex min-h-screen flex-col">
+      <Navbar></Navbar>
       <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden">
         {/* Background gradient effects */}
         <div className="absolute inset-0 bg-gradient-to-b from-background to-background/80 z-0" />
