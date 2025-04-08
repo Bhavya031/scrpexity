@@ -2,18 +2,17 @@ import { HomeSearch } from "@/components/home-search"
 import { Logo } from "@/components/logo"
 import { auth } from "@/lib/auth"
 import { Navbar } from "@/components/navbar"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+
 export default async function Home() {
   const session = await auth()
   
-  if (!session) {
-    // Handle unauthenticated state - you might want to use redirect() here
-    // or render a different UI
-    return <div>Please sign in to access this page</div>
-  }
   return (
     <main className="flex min-h-screen flex-col">
-      <Navbar></Navbar>
+      <Navbar session={session} />
       <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden">
+        
         {/* Background gradient effects */}
         <div className="absolute inset-0 bg-gradient-to-b from-background to-background/80 z-0" />
         <div className="absolute top-1/4 -left-1/4 w-1/2 h-1/2 bg-brand-pink/10 rounded-full blur-3xl" />
@@ -27,7 +26,29 @@ export default async function Home() {
               AI-powered search engine that explores the web and delivers comprehensive answers
             </p>
           </div>
-          <HomeSearch />
+          
+          {session ? (
+            <HomeSearch />
+          ) : (
+            <div className="w-full space-y-6">
+              <div className="relative w-full">
+                {/* Disabled search box for unauthenticated users */}
+                <div className="relative w-full">
+                  <HomeSearch />
+                </div>
+                {/* Overlay for unauthenticated users */}
+                <div className="absolute inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center rounded-xl">
+                  <div className="text-center p-4 bg-background border rounded-lg shadow-lg">
+                    <h3 className="font-semibold mb-2">Login to start chatting</h3>
+                    <p className="text-sm text-muted-foreground mb-4">Sign in to access all features</p>
+                    <Link href="/auth/signin">
+                      <Button className="w-full">Sign In</Button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
             <FeatureCard
@@ -139,4 +160,3 @@ function FeatureCard({
     </div>
   )
 }
-

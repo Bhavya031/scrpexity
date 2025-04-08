@@ -14,8 +14,10 @@ export async function middleware(req: NextRequest) {
   }
   
   // Public paths that don't require authentication
-  const publicPaths = ['/auth/signin', '/auth/error']
-  const isPublicPath = publicPaths.some(path => pathname.startsWith(path))
+  const publicPaths = ['/', '/auth/signin', '/signin', '/auth/error']
+  const isPublicPath = publicPaths.some(path => 
+    pathname === path || (path !== '/' && pathname.startsWith(path))
+  )
   
   // Check if the path needs protection
   if (!session) {
@@ -26,9 +28,12 @@ export async function middleware(req: NextRequest) {
       // Redirect to sign-in page with the callback URL
       return NextResponse.redirect(new URL(`/auth/signin?callbackUrl=${callbackUrl}`, req.url))
     }
-  } else if (pathname === '/auth/signin') {
-    // If user is already signed in and trying to access sign-in page
-    return NextResponse.redirect(new URL('/', req.url))
+  } else {
+    // If user is already signed in
+    if (pathname === '/auth/signin' || pathname === '/signin') {
+      // Redirect to home page
+      return NextResponse.redirect(new URL('/', req.url))
+    }
   }
   
   return NextResponse.next()
