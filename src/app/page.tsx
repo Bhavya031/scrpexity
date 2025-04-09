@@ -20,8 +20,7 @@ export default async function Home() {
 
         <div className="w-full max-w-3xl mx-auto flex flex-col items-center z-10">
           <div className="mb-12 flex flex-col items-center">
-            <Logo className="w-20 h-20 mb-6" />
-            <h1 className="text-5xl font-bold text-center text-gradient">Scrpexity</h1>
+            <h1 className="text-5xl font-bold text-center text-gradient p-6">Scrpexity</h1>
             <p className="text-muted-foreground text-center mt-3 max-w-md">
               AI-powered search engine that explores the web and delivers comprehensive answers
             </p>

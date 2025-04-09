@@ -1,20 +1,25 @@
 // src/app/api/check-search/route.ts
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { auth } from "@/lib/auth"
 
 export async function GET(request: Request) {
   try {
     // Extract the search ID from the URL search parameters
     const { searchParams } = new URL(request.url);
     const searchId = searchParams.get('id');
-    const userId = searchParams.get('userId');
+    const session = await auth();
+    if(!session){
+      return;
+    }
+    const userId = session.user.id;
 
     if (!searchId) {
       return NextResponse.json({ error: "Search ID is required" }, { status: 400 });
     }
 
     // Use provided user ID or fall back to default
-    const user_id = userId || "172af0e5-ea8b-4f32-877c-dc9f37bd2300";
+    const user_id = userId;
 
     // Query the database for the search with the given ID belonging to this user
     const { data, error } = await supabase

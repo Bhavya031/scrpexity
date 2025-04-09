@@ -7,7 +7,7 @@ import { chromium } from "playwright";
 import { GoogleGenerativeAI, ChatSession } from "@google/generative-ai";
 import * as dotenv from "dotenv";
 import { z } from "zod";
-
+import { auth } from "@/lib/auth"
 dotenv.config();
 
 const ScrapeSchema = z.object({
@@ -26,9 +26,12 @@ export async function POST(request: Request) {
     if (!query) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
     }
-
+    const session = await auth();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     // Using the default user ID you provided
-    const user_id = "172af0e5-ea8b-4f32-877c-dc9f37bd2300";
+    const user_id = session.user.id;
 
     const stream = new ReadableStream({
       async start(controller) {

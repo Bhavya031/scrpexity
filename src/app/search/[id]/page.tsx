@@ -1,10 +1,10 @@
 "src/app/search/[id]/page.tsx"
 import { Suspense } from "react"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { SearchHeader } from "@/components/search-header"
 import { SearchResults } from "@/components/search-results"
 import { getSearchById } from "@/lib/storage"
-
+import { auth } from "@/lib/auth"
 interface SearchPageProps {
   params: {
     id: string
@@ -13,7 +13,11 @@ interface SearchPageProps {
 
 export default async function SearchPage({ params }: SearchPageProps) {
   const { id } = await params
-  const userId = "172af0e5-ea8b-4f32-877c-dc9f37bd2300";
+  const session = await auth();
+  if(!session){
+    redirect("/")
+  }
+  const userId = session.user.id;
   // Get the search from the database
   
 

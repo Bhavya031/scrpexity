@@ -106,8 +106,7 @@ export function SearchResults({ searchId }: SearchResultsProps) {
 
     const checkIfCompleted = async () => {
       try {
-        const userId = "172af0e5-ea8b-4f32-877c-dc9f37bd2300";
-        const response = await fetch(`/api/check-search?id=${searchId}&userId=${userId}`);
+        const response = await fetch(`/api/check-search?id=${searchId}`);
 
         if (!response.ok) {
           if (response.status === 404) {
