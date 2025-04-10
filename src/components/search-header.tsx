@@ -1,8 +1,9 @@
+//src/components/search-header.tsx
 "use client"
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -10,16 +11,23 @@ import { Input } from "@/components/ui/input"
 import { Search, ArrowRight, Home } from "lucide-react"
 import { generateRandomString } from "@/lib/utils"
 import { Logo } from "@/components/logo"
+import { quary } from "@/lib/clientCache"
 
 interface SearchHeaderProps {
-  query: string
+  pageid: string
 }
 
-export function SearchHeader({ query }: SearchHeaderProps) {
-  const [searchQuery, setSearchQuery] = useState(query)
+export function SearchHeader({ pageid }: SearchHeaderProps) {
+
+  const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
-
+  const [checkCompleted, setCheckCompleted] = useState(false);
+  useEffect(() => {
+    const queryFromStorage = quary(pageid);
+    setSearchQuery(queryFromStorage || pageid); // Fallback to searchId if storage value is null
+    setCheckCompleted(true);
+  }, [pageid]);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!searchQuery.trim()) return
@@ -30,19 +38,7 @@ export function SearchHeader({ query }: SearchHeaderProps) {
       // Generate a random string for the URL
       const searchId = generateRandomString(10)
 
-      // Store the query in the database
-      const response = await fetch("/api/search", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ query: searchQuery, searchId }),
-      })
-
-      if (!response.ok) {
-        throw new Error("Failed to create search")
-      }
-
+      const quarys = quary(pageid)
       // Redirect to the search results page
       router.push(`/search/${searchId}`)
     } catch (error) {
@@ -56,7 +52,7 @@ export function SearchHeader({ query }: SearchHeaderProps) {
       <div className="container max-w-6xl mx-auto px-4 py-3">
         <div className="flex items-center gap-4">
           <Link href="/" className="flex-shrink-0">
-            <Logo className="w-8 h-8" />
+            {/* <Logo className="w-8 h-8" /> */}
           </Link>
 
           <form onSubmit={handleSubmit} className="flex-1 relative">

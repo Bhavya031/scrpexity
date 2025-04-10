@@ -1,9 +1,18 @@
 import { HomeSearch } from "@/components/home-search"
 import { Logo } from "@/components/logo"
+import { auth } from "@/lib/auth"
+import { Navbar } from "@/components/navbar"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { ApiKeySetup } from "@/components/api-key-setup"
 
-export default function Home() {
+// In your home.tsx
+export default async function Home() {
+  const session = await auth()
+  
   return (
     <main className="flex min-h-screen flex-col">
+      <Navbar session={session} />
       <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden">
         {/* Background gradient effects */}
         <div className="absolute inset-0 bg-gradient-to-b from-background to-background/80 z-0" />
@@ -12,15 +21,41 @@ export default function Home() {
 
         <div className="w-full max-w-3xl mx-auto flex flex-col items-center z-10">
           <div className="mb-12 flex flex-col items-center">
-            <Logo className="w-20 h-20 mb-6" />
-            <h1 className="text-5xl font-bold text-center text-gradient">Scrpexity</h1>
+            <h1 className="text-5xl font-bold text-center text-gradient p-6">Scrpexity</h1>
+            
             <p className="text-muted-foreground text-center mt-3 max-w-md">
               AI-powered search engine that explores the web and delivers comprehensive answers
             </p>
           </div>
-          <HomeSearch />
+          
+          {session ? (
+            session.user.hasApiKey ? (
+              <HomeSearch />
+            ) : (
+              <ApiKeySetup session={session} />
+            )
+          ) : (
+            <div className="w-full space-y-6">
+              <div className="relative w-full">
+                {/* Disabled search box for unauthenticated users */}
+                <div className="relative w-full">
+                  <HomeSearch />
+                </div>
+                {/* Overlay for unauthenticated users */}
+                <div className="absolute inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center rounded-xl">
+                  <div className="text-center p-4 bg-background border rounded-lg shadow-lg">
+                    <h3 className="font-semibold mb-2">Login to start chatting</h3>
+                    <p className="text-sm text-muted-foreground mb-4">Sign in to access all features</p>
+                    <Link href="/auth/signin">
+                      <Button className="w-full">Sign In</Button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
-          <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+<div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
             <FeatureCard
               icon="Search"
               title="Intelligent Search"
@@ -130,4 +165,3 @@ function FeatureCard({
     </div>
   )
 }
-
