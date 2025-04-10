@@ -7,13 +7,16 @@ import type {
 import type { DefaultSession, NextAuthOptions } from "next-auth"
 import { getServerSession } from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
-import { supabase } from "@/lib/supabase";
-import { v5 as uuidv5 } from 'uuid'; // Using UUID v5 for deterministic generation
+import { supabase } from "@/lib/supabase"
+import { v5 as uuidv5 } from 'uuid' // Using UUID v5 for deterministic generation
+import CryptoJS from 'crypto-js' // Import for encryption
 
 declare module "next-auth" {
   interface Session {
     user: {
-      id?: string
+      id?: string;
+      hasApiKey?: boolean; // Add this field to track API key status
+      apiKey?: string | null; 
     } & DefaultSession["user"]
   }
 }
@@ -45,39 +48,52 @@ export const authOptions: NextAuthOptions = {
     error: '/auth/error',
   },
   callbacks: {
-    async session({ session, token }) {
-      if (session.user && token.sub) {
-        // Convert Google sub to UUID
-        const userId = googleSubToUUID(token.sub);
-        session.user.id = userId;
+    // In the session callback of auth.ts
+async session({ session, token }) {
+  if (session.user && token.sub) {
+    // Convert Google sub to UUID
+    const userId = googleSubToUUID(token.sub);
+    session.user.id = userId;
+    
+    // Check if user exists in Supabase
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id, encrypted_api_key')
+      .eq('id', userId)
+      .single();
+      
+    if (userError || !userData) {
+      console.log(`User with ID ${userId} doesn't exist, creating new record`);
+      
+      // Insert new user if they don't exist
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert({
+          id: userId,
+          full_name: session.user.name || '',
+          email: session.user.email || '',
+          created_at: new Date().toISOString()
+        });
         
-        // Check if user exists in Supabase
-        const { data, error } = await supabase
-          .from('users')
-          .select('id')
-          .eq('id', userId)
-          .single();
-
-        if (error || !data) {
-          console.log(`User with ID ${userId} doesn't exist, creating new record`);
-          
-          // Insert new user if they don't exist
-          const { error: insertError } = await supabase
-            .from('users')
-            .insert({
-              id: userId,
-              full_name: session.user.name || '',
-              email: session.user.email || '',
-              created_at: new Date().toISOString()
-            });
-
-          if (insertError) {
-            console.error('Error creating user:', insertError);
-          }
-        }
+      if (insertError) {
+        console.error('Error creating user:', insertError);
       }
-      return session;
+      
+      // New user has no API key
+      session.user.hasApiKey = false;
+    } else {
+      // Set hasApiKey based on whether the encrypted_api_key exists
+      session.user.hasApiKey = Boolean(userData.encrypted_api_key);
+      if (userData.encrypted_api_key) {
+        session.user.apiKey = decryptApiKey(userData.encrypted_api_key);
+      } else {
+        session.user.apiKey = null; // Explicitly set to null when no API key exists
+      }
     }
+  }
+  
+  return session;
+}
   }
 }
 
@@ -89,3 +105,15 @@ export function auth(
 ) {
   return getServerSession(...args, authOptions)
 }
+
+// Add utility functions for API key management
+export const encryptApiKey = (apiKey: string): string => {
+  const ENCRYPTION_SECRET = process.env.ENCRYPTION_SECRET as string;
+  return CryptoJS.AES.encrypt(apiKey, ENCRYPTION_SECRET).toString();
+};
+
+export const decryptApiKey = (encryptedApiKey: string): string => {
+  const ENCRYPTION_SECRET = process.env.ENCRYPTION_SECRET as string;
+  const bytes = CryptoJS.AES.decrypt(encryptedApiKey, ENCRYPTION_SECRET);
+  return bytes.toString(CryptoJS.enc.Utf8);
+};

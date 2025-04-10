@@ -4,7 +4,9 @@ import { auth } from "@/lib/auth"
 import { Navbar } from "@/components/navbar"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { ApiKeySetup } from "@/components/api-key-setup"
 
+// In your home.tsx
 export default async function Home() {
   const session = await auth()
   
@@ -12,7 +14,6 @@ export default async function Home() {
     <main className="flex min-h-screen flex-col">
       <Navbar session={session} />
       <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden">
-        
         {/* Background gradient effects */}
         <div className="absolute inset-0 bg-gradient-to-b from-background to-background/80 z-0" />
         <div className="absolute top-1/4 -left-1/4 w-1/2 h-1/2 bg-brand-pink/10 rounded-full blur-3xl" />
@@ -21,13 +22,18 @@ export default async function Home() {
         <div className="w-full max-w-3xl mx-auto flex flex-col items-center z-10">
           <div className="mb-12 flex flex-col items-center">
             <h1 className="text-5xl font-bold text-center text-gradient p-6">Scrpexity</h1>
+            
             <p className="text-muted-foreground text-center mt-3 max-w-md">
               AI-powered search engine that explores the web and delivers comprehensive answers
             </p>
           </div>
           
           {session ? (
-            <HomeSearch />
+            session.user.hasApiKey ? (
+              <HomeSearch />
+            ) : (
+              <ApiKeySetup session={session} />
+            )
           ) : (
             <div className="w-full space-y-6">
               <div className="relative w-full">
@@ -49,7 +55,7 @@ export default async function Home() {
             </div>
           )}
 
-          <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+<div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
             <FeatureCard
               icon="Search"
               title="Intelligent Search"

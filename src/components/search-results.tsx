@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { StreamButton } from "@/components/ui/stream-button"
 import { quary } from "@/lib/clientCache"
+import { useRouter } from "next/navigation"; // Use next/navigation for app router
 
 interface SearchResultsProps {
   searchId: string;
@@ -73,6 +74,7 @@ function ErrorAlert({ message, onClose }: { message: string, onClose: () => void
 type SourceItem = string | { link: string };
 
 export function SearchResults({ searchId }: SearchResultsProps) {
+  const router = useRouter(); // Add router instance
   const [steps, setSteps] = useState<SearchStep[]>([
     { type: "enhancing", enhancedQueryLoaded: false },
   ]);
@@ -202,14 +204,29 @@ export function SearchResults({ searchId }: SearchResultsProps) {
                 const data = JSON.parse(part);
 
                 // Handle error messages from the server
+                // Handle error messages from the server
                 if (data.error) {
                   setError({
                     type: data.errorType || "unknown",
                     message: data.message || "An unexpected error occurred."
                   });
+                  
+                  // Handle specific error types
+                  if (data.errorType === "invalid_api_key") {
+                    // Handle invalid API key
+                    setTimeout(() => {
+                      router.push('/'); // Redirect to home page
+                    }, 2000);
+                  } else if (data.errorType === "authentication_failed") {
+                    // Handle authentication failure
+                    setTimeout(() => {
+                      router.push('/'); // Maybe redirect to settings page instead
+                    }, 2000);
+                  }
+                  
                   setIsLoading(false);
                   return; // Stop processing the stream
-                }
+                  }
 
                 switch (data.step) {
                   case 1:

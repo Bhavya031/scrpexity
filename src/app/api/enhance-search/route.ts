@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
     const stream = new ReadableStream({
       async start(controller) {
-        const SCRAPYBARA_API_KEY = process.env.SCRAPYBARA_API_KEY || "";
+        const SCRAPYBARA_API_KEY = session.user.apiKey || "";
         const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
         const client = new ScrapybaraClient({ apiKey: SCRAPYBARA_API_KEY });
@@ -89,13 +89,54 @@ export async function POST(request: Request) {
           const streamUrlResponse = await instance.getStreamUrl();
           const streamUrl = streamUrlResponse.streamUrl;
           controller.enqueue(encoder.encode(JSON.stringify({ step: 2, streamUrl }) + '\n'));
-        } catch (err) {
+        } catch (err: any) {
           console.error("Error starting Scrapybara instance:", err);
-          // Send error to client
+          
+          // Check for invalid API key error
+          if (err?.statusCode === 401 && err?.body?.detail?.includes("Invalid API key")) {
+            // Handle 401 Invalid API key error
+            await supabase
+              .from('users')
+              .update({
+                encrypted_api_key: null
+              })
+              .eq('id', user_id);
+            
+            // Send error response to client
+            controller.enqueue(encoder.encode(JSON.stringify({ 
+              error: true, 
+              errorType: "invalid_api_key",
+              message: "Authentication failed: Invalid API key. Please update your Scrapybara API key in the settings." 
+            }) + '\n'));
+            
+            controller.close();
+            return;
+          } 
+          else if (err?.statusCode === 403 && err?.body?.detail?.includes("Not authenticated")) {
+            // Handle 403 Not authenticated error
+            await supabase
+              .from('users')
+              .update({
+                encrypted_api_key: null
+              })
+              .eq('id', user_id);
+            
+            // Send error response to client
+            controller.enqueue(encoder.encode(JSON.stringify({ 
+              error: true, 
+              errorType: "authentication_failed",
+              message: "Authentication failed: Not authenticated. Please update your Scrapybara API key in the settings." 
+            }) + '\n'));
+            
+            controller.close();
+            return;
+          }
+          
+          // Existing error handling
           controller.enqueue(encoder.encode(JSON.stringify({ 
             error: true, 
             errorType: "session_limit",
-            message: "Unable to start search session. Session limit reached. stop one instanse to start this." 
+            message: "Unable to start search session. Session limit reached. Stop one instance to start this." 
           }) + '\n'));
           controller.close();
           return;
@@ -106,7 +147,7 @@ export async function POST(request: Request) {
         const browser = await chromium.connectOverCDP(cdpUrl);
         const context = await browser.newContext({ viewport: { width: 1030, height: 700 } });
         const page = await context.newPage();
-        const anthro = anthropic({name: "claude-3-7-sonnet-20250219"});
+        const anthro = anthropic({name: "claude-3-7-sonnet-20250219", apiKey:  process.env.ANTHROPIC_API_KEY});
 
         await page.goto("https://duckduckgo.com/");
         try {await client.act({
@@ -256,34 +297,39 @@ export async function POST(request: Request) {
 
         const summarizer = genAI.getGenerativeModel({
           model: "gemini-2.0-flash-lite",
-          systemInstruction: `Summarize multiple web links  with proper citations.
-Create clean HTML markup with Tailwind CSS classes for a [TOPIC] information card that I can paste directly into my React component. Do not include any React component structure, imports, or export statements - I only need the HTML portion.
+          systemInstruction: `Summarize multiple web links with proper citations. Create clean HTML markup with Tailwind CSS classes for a [TOPIC] information card that I can paste directly into my React component.
 
-Format the content with these citation requirements:
+Important formatting requirements:
+- Begin directly with <div> tags - no <!DOCTYPE>, <html>, <head>, or <body> tags
+- Don't include any React component structure, imports, or export statements
+- Don't wrap output in \`\`\`html and \`\`\` tags - provide only the pure div content
+
+Citation requirements:
 1. Add superscript citation numbers after sentences requiring references
-2. Format citations as: <a href="[URL]" className="text-[#ee4399] no-underline hover:underline"><sup>[NUMBER]</sup></a>
+2. Format citations as: [NUMBER]
 3. Use exactly the color #ee4399 for all citation links
 4. Include a "References" section at the bottom with numbered entries
 5. Each reference should include the number, source title, and URL
 
-Apply these Tailwind CSS styling requirements:
+Tailwind CSS styling requirements:
 - Use mb-6 for paragraph spacing
 - Use font-bold for headings and key terms
 - Format bulleted lists appropriately
-- Design for a black background with white text (bg-black text-white)
+- Design for a #09090b background with white text (bg-[#09090b] text-white)
 
 Please provide ONLY the HTML markup - no React component wrapper, no imports, no exports. Just the HTML content I can paste directly into my existing component's return statement.
+
 
 Example of desired citation format:
 "Quantum computing harnesses quantum mechanical phenomena <a href="https://example.com" className="text-[#ee4399] no-underline hover:underline"><sup>1</sup></a>."
 
 Example of desired reference format:
 <div className="mt-8">
-  <h2 className="text-xl font-bold mb-4">References</h2>
-  <ol className="list-decimal pl-5">
-    <li><a href="https://example.com" className="text-[#ee4399] no-underline hover:underline">Title of Reference</a></li>
-  </ol>
-</div>`,
+  <h2 className="text-xl font-bold mb-4">References</h2>
+  <ol className="list-decimal pl-5">
+    <li><a href="https://example.com" className="text-[#ee4399] no-underline hover:underline">Title of Reference</a></li>
+  </ol>
+</div>`
         });
 
         const sumChat = summarizer.startChat({
