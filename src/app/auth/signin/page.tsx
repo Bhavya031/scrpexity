@@ -1,10 +1,10 @@
-// app/auth/signin/page.tsx
 'use client'
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { getProviders, signIn, useSession } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 
-export default function SignIn() {
+// Create a separate component that uses useSearchParams
+function SignInContent() {
   const [providers, setProviders] = useState<any>(null)
   const { data: session } = useSession()
   const router = useRouter()
@@ -48,5 +48,14 @@ export default function SignIn() {
         ))}
       </div>
     </div>
+  )
+}
+
+// Main component with Suspense boundary
+export default function SignIn() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SignInContent />
+    </Suspense>
   )
 }
