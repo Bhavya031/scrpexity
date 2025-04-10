@@ -28,19 +28,9 @@ export function HomeSearch() {
       const searchId = generateRandomString(10)
 
       // Store the query in the database
-      const response = await fetch("/api/search", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ query, searchId }),
-      })
+      localStorage.setItem(searchId, query) 
+      localStorage.setItem("dJ6AwcMNNj", "what is quantum computer explain site:.edu")
 
-      if (!response.ok) {
-        throw new Error("Failed to create search")
-      }
-
-      // Redirect to the search results page
       router.push(`/search/${searchId}`)
     } catch (error) {
       console.error("Error creating search:", error)

@@ -1,3 +1,5 @@
+import { supabase } from "@/lib/supabase";
+
 interface Search {
   id: string
   query: string
@@ -17,8 +19,36 @@ export async function createSearch(searchId: string, query: string): Promise<Sea
   return search
 }
 
-export async function getSearchById(id: string): Promise<Search | null> {
-  return searches[id] || null
+export async function getSearchById(searchId: string, userId: string) {
+  try {
+    // Check if either parameter is undefined before querying
+    if (!searchId || !userId) {
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from("searches")
+      .select("*")
+      .eq("searchId", searchId)
+      .eq("user_id", userId)
+      .single();
+    
+    if (error) {
+      // For "not found" errors, return null without raising alarm
+      if (error.code === "PGRST116") {
+        return null;
+      }
+      
+      // For other errors, log with more detail
+      console.error("Unexpected database error:", error.message, error.details);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    // This catches more serious errors like network issues
+    console.error("Exception in getSearchById:", err);
+    return null;
+  }
 }
 
 export async function getAllSearches(): Promise<Search[]> {

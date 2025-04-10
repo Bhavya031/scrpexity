@@ -1,9 +1,10 @@
+"src/app/search/[id]/page.tsx"
 import { Suspense } from "react"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { SearchHeader } from "@/components/search-header"
 import { SearchResults } from "@/components/search-results"
 import { getSearchById } from "@/lib/storage"
-
+import { auth } from "@/lib/auth"
 interface SearchPageProps {
   params: {
     id: string
@@ -11,21 +12,22 @@ interface SearchPageProps {
 }
 
 export default async function SearchPage({ params }: SearchPageProps) {
-  const { id } = params
-
-  // Get the search from the database
-  const search = await getSearchById(id)
-
-  if (!search) {
-    notFound()
+  const { id } = await params
+  const session = await auth();
+  if(!session){
+    redirect("/")
   }
+  const userId = session.user.id;
+  // Get the search from the database
+  
+
 
   return (
     <main className="flex min-h-screen flex-col">
-      <SearchHeader query={search.query} />
+      <SearchHeader pageid={id} />
       <div className="flex-1 container max-w-4xl mx-auto px-4 py-6">
         <Suspense fallback={<SearchLoadingSkeleton />}>
-          <SearchResults searchId={id} query={search.query} />
+          <SearchResults searchId={id} />
         </Suspense>
       </div>
     </main>
