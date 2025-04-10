@@ -181,7 +181,7 @@ export async function POST(request: Request) {
               model: anthro,
               tools: [bashTool(instance), computerTool(instance), editTool(instance)],
               system: UBUNTU_SYSTEM_PROMPT,
-              prompt: `Search result is already loaded. First, analyze the link to make sure it aligns with our search result—avoid links that are about the topic but have a very different context or are just index pages (like news channels listing articles on one case); only after confirming this, open the non-ad, not yet opened link in a new tab using Control + Click, then go to that tab by clicking on it, and stop—your job is done. If there is already a page loaded (before you click any link), close the current page and return to the main page to open another not yet opened link; avoid reopening the last link ${JSON.stringify(lastLink)} (if it says none, it means no links have been clicked yet, so scroll if you have to). If you see a link at the bottom of the page that is hidden behind the bottom taskbar or a black transparent overlay, scroll up a little to bring it into view, then continue with your task`,
+              prompt: `Search result is already loaded. First, analyze the link to make sure it aligns with our search result—avoid links that are about the topic but have a very different context or are just index pages (like news channels listing articles on one case); only after confirming this, open the non-ad, not yet opened link in a new tab using Control + Click, then go to that tab by clicking on it, and stop—your job is done. If there is already a page loaded (before you click any link), close the current page and return to the main page to open another not yet opened link; avoid reopening the last link ${JSON.stringify(lastLink)} (if it says none, it means no links have been clicked yet, so scroll if you have to). If you see a link at the bottom of the page that is hidden behind the bottom taskbar or a black transparent overlay, scroll up a little to bring it into view, then continue with your task. avoid clicking on they don't have good contnet IBM's website. also when click on tab to goto that page sometimes you click on cancel tab option use tab.`,
               onStep: (step) => console.log(step.text),
             });
             console.log("step 3.1 done") 
@@ -296,7 +296,7 @@ export async function POST(request: Request) {
         controller.enqueue(encoder.encode(JSON.stringify({ step: 4, loading: true }) + "\n"));
 
         const summarizer = genAI.getGenerativeModel({
-          model: "gemini-2.0-flash-lite",
+          model: "gemini-2.0-flash",
           systemInstruction: `Summarize multiple web links with proper citations. Create clean HTML markup with Tailwind CSS classes for a [TOPIC] information card that I can paste directly into my React component.
 
 Important formatting requirements:
