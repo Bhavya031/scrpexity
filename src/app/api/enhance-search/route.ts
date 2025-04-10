@@ -147,7 +147,7 @@ export async function POST(request: Request) {
         const browser = await chromium.connectOverCDP(cdpUrl);
         const context = await browser.newContext({ viewport: { width: 1030, height: 700 } });
         const page = await context.newPage();
-        const anthro = anthropic({name: "claude-3-7-sonnet-20250219", apiKey:  process.env.ANTHROPIC_API_KEY});
+        const anthro = anthropic({name: "claude-3-7-sonnet-20250219"});
 
         await page.goto("https://duckduckgo.com/");
         try {await client.act({
