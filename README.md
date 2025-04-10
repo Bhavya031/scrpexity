@@ -97,76 +97,41 @@ Note: Using Claude directly is slower than normal Scrapybara calls, but it may n
 
 ## How It Works
 
-Scrpexity is a search enhancement application that combines multiple AI services to provide better search results:
-
-1. **User Authentication**: Uses NextAuth with Google OAuth for secure authentication
-2. **Search Enhancement**: 
-   - Takes user queries and enhances them using Gemini API
-   - Searches the web using Scrapybara/Claude to gather relevant information
-3. **Data Processing**:
-   - Stores user data and search history in Supabase
-   - Encrypts API keys for security
-4. **Results Delivery**:
-   - Provides summarized results from multiple sources
-   - Tracks search completion status
-
-The application uses a streaming API approach to deliver results in real-time, although there's currently a limitation with Vercel deployment that restricts it to sending only the first response.
-
-How It Works
 Scrpexity is a search enhancement application that uses a multi-agent system to provide better search results:
-User Flow
 
-Login & Authentication:
+### User Flow
+1. **Login & Authentication**:
+   - User logs in using Google OAuth
+   - Upon first login, user enters their Scrapybara API key
+   - The API key is encrypted and stored in the database
+   - During user session, the API key is passed to the session for client-side access
 
-User logs in using Google OAuth
-Upon first login, user enters their Scrapybara API key
-The API key is encrypted and stored in the database
-During user session, the API key is passed to the session for client-side access
-
-
-Search Processing:
-
-User submits a query
-The query is enhanced by Gemini 2.5 Flash Light to improve search relevance
-
-
-Multi-Agent Search System:
-
-First agent: Uses Scrapybara to enter the enhanced query into DuckDuckGo (preferred over Google for less AI filtering)
-Looping through search results (3 iterations):
-
-Agent 1: Opens the link
-Agent 2: Reads and extracts content from the page
-Agent 3: Closes the tab
-
-
-Previous data is tracked to avoid revisiting the same links
-
-
-Results Compilation:
-
-All gathered information is fed to a summarizing agent
-The agent creates a concise summary with proper citations
-
-
-Data Streaming & Storage:
-
-Results are streamed in real-time to the frontend
-All search data is stored in the database for future reference
-
-
-Error Handling:
-
-Robust error handling for Scrapybara-related issues:
-
-Low API credits
-Session limits
-Invalid card errors
-And more for smooth user experience
-
-
-
-
+2. **Search Processing**:
+   - User submits a query
+   - The query is enhanced by Gemini 2.5 Flash Light to improve search relevance
+   
+3. **Multi-Agent Search System**:
+   - First agent: Uses Scrapybara to enter the enhanced query into DuckDuckGo (preferred over Google for less AI filtering)
+   - Looping through search results (3 iterations):
+     - Agent 1: Opens the link
+     - Agent 2: Reads and extracts content from the page
+     - Agent 3: Closes the tab
+   - Previous data is tracked to avoid revisiting the same links
+   
+4. **Results Compilation**:
+   - All gathered information is fed to a summarizing agent
+   - The agent creates a concise summary with proper citations
+   
+5. **Data Streaming & Storage**:
+   - Results are streamed in real-time to the frontend
+   - All search data is stored in the database for future reference
+   
+6. **Error Handling**:
+   - Robust error handling for Scrapybara-related issues:
+     - Low API credits
+     - Session limits
+     - Invalid card errors
+     - And more for smooth user experience
 
 The application uses streaming responses to show results in real-time, giving users immediate feedback as the search progresses.
 
