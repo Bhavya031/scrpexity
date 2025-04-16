@@ -2,6 +2,14 @@
 
 > **Note:** The project's streaming API will only receive the first response in vercel then stop because my dumbass wrote streaming API enqueue but Vercel only accepts edge cases, but works fine in local development. Will fix this soon. 
 
+
+https://github.com/user-attachments/assets/e3569e07-02ce-4b2d-978c-e27ced6b6874
+
+
+https://github.com/user-attachments/assets/371e8070-22c1-4700-b5f8-110fc3a4b9b6
+
+
+
 ## Quick Start
 
 1. Install dependencies:
